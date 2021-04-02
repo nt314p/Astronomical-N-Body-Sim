@@ -1,4 +1,5 @@
 ﻿#pragma kernel StepSimulation
+#pragma kernel ComputeTotalEnergy
 #pragma kernel ProcessTexture
 
 #define G_u 0.0000000000667408
@@ -7,13 +8,14 @@
 struct PointMass
 {
 	float mass; // planned [in 10^30 kilograms]
-	float3 velocity;
+	float3 position;
 };
 
 RWTexture2D<float4> renderTexture;
 
-RWStructuredBuffer<float3> positions : register(u0); // planned [in petameters (10^15 meters)]
+RWStructuredBuffer<float3> velocities : register(u0); // planned [in petameters (10^15 meters)]
 RWStructuredBuffer<PointMass> masses : register(u1);
+RWStructuredBuffer<float> readout : register(u2);
 
 float numMasses;
 float deltaTime;
@@ -28,17 +30,18 @@ inline float3 hueToRGB(float H)
 	return saturate(float3(R, G, B));
 }
 
-[numthreads(128, 1, 1)]
+[numthreads(256, 1, 1)]
 void StepSimulation(uint3 id : SV_DispatchThreadID)
 {
-	float3 pos = positions[id.x];
-	float3 vel = masses[id.x].velocity;
+	float3 pos = masses[id.x].position;
+	float3 vel = velocities[id.x];
 	float3 accel = 0;
 
 	for (int i = 0; i < numMasses; ++i) // calculate net acceleration
 	{
-		float mass = masses[i].mass;
-		float3 deltaPos = positions[i] - pos;
+		PointMass p = masses[i];
+		float mass = p.mass;
+		float3 deltaPos = p.position - pos;
 		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.000001f);
 		float3 cbInvDist = invDist * invDist * invDist;
 
@@ -50,8 +53,8 @@ void StepSimulation(uint3 id : SV_DispatchThreadID)
 	pos += (vel + accel * 0.5f) * deltaTime; // leapfrog integration
 	vel += accel * deltaTime;
 
-	masses[id.x].velocity = vel;
-	positions[id.x] = pos;
+	masses[id.x].position = pos;
+	velocities[id.x] = vel;
 
 	float4 v = mul(m, float4(pos, 1)); // transform world space position to screen space
 	float w = v.w;
@@ -59,16 +62,48 @@ void StepSimulation(uint3 id : SV_DispatchThreadID)
 
 	float j = length(vel) * 0.0025;
 
-	if (v.x >= 0 && v.y >= 0) 
+	if (v.x >= 0 && v.y >= 0)
 	{
 		renderTexture[(float2) v] += w > 0 ? float4(hueToRGB(j), 1.0) : 0;
+	}
+}
+
+[numthreads(128, 1, 1)]
+void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x == 0)
+	{
+		readout[0] = 0;
+	}
+
+	PointMass p = masses[id.x];
+
+	float Gm = G_u * p.mass;
+	for (int i = 0; i < numMasses; ++i)
+	{
+		if (i != id.x)
+		{
+			PointMass po = masses[i];
+			float dist = distance(p.position, po.position);
+			readout[0] -= Gm * po.mass / dist;
+		}
+	}
+
+	float vel = velocities[id.x];
+
+	for (int j = 0; j < numMasses; ++j) {
+		if (j == id.x)
+		{
+			readout[0] += 0.5 * p.mass * vel * vel;
+		}
 	}
 }
 
 
 // Fade kernel, subtracts color from all pixels
 [numthreads(32, 8, 1)]
-void ProcessTexture(uint3 id : SV_DispatchThreadID) {
+void ProcessTexture(uint3 id : SV_DispatchThreadID)
+{
 	float4 originalValue = renderTexture[id.xy];
 	float4 fadedValue = max(0, originalValue - 0.1 * deltaTime);
 	renderTexture[id.xy] = fadedValue;

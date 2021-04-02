@@ -3,7 +3,7 @@
 public struct PointMass
 {
     public float mass;
-    public Vector3 velocity;
+    public Vector3 position;
 };
 
 public class AstronomicalRunner : MonoBehaviour
@@ -21,30 +21,33 @@ public class AstronomicalRunner : MonoBehaviour
     private RenderTexture renderTexture;
 
     private PointMass[] masses;
-    private Vector3[] positions;
+    private Vector3[] velocities;
 
     //[SerializeField] private Transform parentCanvas = null;
     //[SerializeField] private GameObject obj;
     //private RectTransform[] massTransforms;
 
     private ComputeBuffer massesBuffer;
-    private ComputeBuffer positionsBuffer;
+    private ComputeBuffer velocitiesBuffer;
+    private ComputeBuffer readout;
 
     private int StepSimId;
+    private int CompEnergyId;
     private int ProcessTextureId;
 
     private void OnEnable()
     {
         StepSimId = computeShader.FindKernel("StepSimulation");
+        CompEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
         ProcessTextureId = computeShader.FindKernel("ProcessTexture");
 
         masses = new PointMass[numMasses];
-        positions = new Vector3[numMasses];
+        velocities = new Vector3[numMasses];
         //massTransforms = new RectTransform[numMasses];
 
         for (int i = 0; i < numMasses; i++) // Change point mass creation here
         {
-            Vector3 pos = Random.insideUnitCircle * 400;
+            Vector3 pos = Random.insideUnitCircle * 100;
             pos.z = pos.y;
             pos.y = Random.Range(-2, 2);
 
@@ -53,11 +56,11 @@ public class AstronomicalRunner : MonoBehaviour
 
             PointMass p = new PointMass
             {
-                mass = 5000000000000,
-                velocity = vel,
+                mass = 600000000000,
+                position = pos,
             };
 
-            positions[i] = pos;
+            velocities[i] = vel;
             masses[i] = p;
         }
 
@@ -71,20 +74,29 @@ public class AstronomicalRunner : MonoBehaviour
         massesBuffer = new ComputeBuffer(numMasses, 16);
         massesBuffer.SetData(masses);
 
-        positionsBuffer = new ComputeBuffer(numMasses, 12);
-        positionsBuffer.SetData(positions);
+        velocitiesBuffer = new ComputeBuffer(numMasses, 12);
+        velocitiesBuffer.SetData(velocities);
 
         computeShader.SetFloat("numMasses", numMasses);
         computeShader.SetBuffer(StepSimId, "masses", massesBuffer);
-        computeShader.SetBuffer(StepSimId, "positions", positionsBuffer);
+        computeShader.SetBuffer(StepSimId, "velocities", velocitiesBuffer);
+
+        computeShader.SetBuffer(CompEnergyId, "masses", massesBuffer);
+        computeShader.SetBuffer(CompEnergyId, "velocities", velocitiesBuffer);
+
+        readout = new ComputeBuffer(1, 4);
+        readout.SetData(new float[] { 0 });
+        computeShader.SetBuffer(CompEnergyId, "readout", readout);
     }
 
     private void OnDisable()
     {
         massesBuffer.Release();
-        positionsBuffer.Release();
+        velocitiesBuffer.Release();
+        readout.Release();
         massesBuffer = null;
-        positionsBuffer = null;
+        velocitiesBuffer = null;
+        readout = null;
     }
 
     private void UpdateMasses(float deltaTime)
@@ -96,7 +108,7 @@ public class AstronomicalRunner : MonoBehaviour
 
         computeShader.SetMatrix("m", m); // matrix to convert world space position to screen space
         computeShader.SetFloat("deltaTime", deltaTime);
-        computeShader.Dispatch(StepSimId, numMasses / 128, 1, 1); // compute a single step from the simulation
+        computeShader.Dispatch(StepSimId, numMasses / 256, 1, 1); // compute a single step from the simulation
         if (useFadeProcessing)
         {
             computeShader.Dispatch(ProcessTextureId, (renderTexture.width / 32) + 1, (renderTexture.height / 8) + 1, 1);
@@ -117,15 +129,28 @@ public class AstronomicalRunner : MonoBehaviour
             renderTexture.Create();
             computeShader.SetTexture(StepSimId, "renderTexture", renderTexture);
             computeShader.SetTexture(ProcessTextureId, "renderTexture", renderTexture);
+
+
         }
 
         UpdateMasses(Time.deltaTime * timeStep);
+
+        //LogTotalEnergy();
+
         Graphics.Blit(renderTexture, destination);
 
         if (!useFadeProcessing)
         {
             renderTexture.Release();
         }
+    }
+
+    private void LogTotalEnergy()
+    {
+        computeShader.Dispatch(CompEnergyId, numMasses / 128, 1, 1);
+        var readoutArr = new float[1];
+        readout.GetData(readoutArr);
+        Debug.Log(readoutArr[0]);
     }
 
     /*

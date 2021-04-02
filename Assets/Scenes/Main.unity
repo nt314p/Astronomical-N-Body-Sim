@@ -155,10 +155,10 @@ MonoBehaviour:
   computeShader: {fileID: 7200000, guid: 2f3933c349923df4a83e341e68e17104, type: 3}
   cam: {fileID: 963194227}
   dimensions: {x: 1920, y: 1080}
-  numMasses: 16000
+  numMasses: 10240
   useScreenDimensions: 1
   useFadeProcessing: 0
-  timeStep: 0.1
+  timeStep: 0.05
 --- !u!20 &963194227
 Camera:
   m_ObjectHideFlags: 0
@@ -230,4 +230,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   xSensitivity: 4
   ySensitivity: 4
-  moveSpeed: 80
+  moveSpeed: 100
