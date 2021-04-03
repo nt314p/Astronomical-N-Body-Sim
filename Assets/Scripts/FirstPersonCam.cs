@@ -16,8 +16,14 @@ public class FirstPersonCam : MonoBehaviour
 
     private void Update()
     {
-        float xAngle = xSensitivity * Input.GetAxis("Mouse X");
-        float yAngle = -ySensitivity * Input.GetAxis("Mouse Y");
+        ProcessLook();
+        ProcessMovement();
+    }
+
+    private void ProcessLook()
+    {
+        var xAngle = xSensitivity * Input.GetAxis("Mouse X");
+        var yAngle = -ySensitivity * Input.GetAxis("Mouse Y");
 
         Vector3 a = transform.forward;
         a.y = 0;
@@ -43,8 +49,6 @@ public class FirstPersonCam : MonoBehaviour
         pitch += yAngle;
 
         transform.eulerAngles = new Vector3(pitch, yaw, 0.0f);
-
-        ProcessMovement();
     }
 
     private void ProcessMovement()
@@ -54,7 +58,7 @@ public class FirstPersonCam : MonoBehaviour
             var forward = transform.forward;
             forward.y = 0;
             forward.Normalize();
-            transform.Translate(forward * moveSpeed * Time.deltaTime, Space.World);
+            transform.Translate(forward * (moveSpeed * Time.deltaTime), Space.World);
         }
 
         if (Input.GetKey(KeyCode.S))
@@ -62,27 +66,27 @@ public class FirstPersonCam : MonoBehaviour
             var forward = transform.forward;
             forward.y = 0;
             forward.Normalize();
-            transform.Translate(-forward * moveSpeed * Time.deltaTime, Space.World);
+            transform.Translate(-forward * (moveSpeed * Time.deltaTime), Space.World);
         }
 
         if (Input.GetKey(KeyCode.A))
         {
-            transform.Translate(-Vector3.right * moveSpeed * Time.deltaTime);
+            transform.Translate(-Vector3.right * (moveSpeed * Time.deltaTime));
         }
 
         if (Input.GetKey(KeyCode.D))
         {
-            transform.Translate(Vector3.right * moveSpeed * Time.deltaTime);
+            transform.Translate(Vector3.right * (moveSpeed * Time.deltaTime));
         }
 
         if (Input.GetKey(KeyCode.Space))
         {
-            transform.Translate(Vector3.up * moveSpeed * Time.deltaTime, Space.World);
+            transform.Translate(Vector3.up * (moveSpeed * Time.deltaTime), Space.World);
         }
 
         if (Input.GetKey(KeyCode.LeftShift))
         {
-            transform.Translate(-Vector3.up * moveSpeed * Time.deltaTime, Space.World);
+            transform.Translate(-Vector3.up * (moveSpeed * Time.deltaTime), Space.World);
         }
     }
 }

@@ -8,19 +8,26 @@
 struct PointMass
 {
 	float mass; // planned [in 10^30 kilograms]
-	float3 position;
+	float3 position; // planned [in petameters (10^15 meters)]
+};
+
+struct Motion
+{
+	float3 velocity;
+	float3 acceleration;
 };
 
 RWTexture2D<float4> renderTexture;
 
-RWStructuredBuffer<float3> velocities : register(u0); // planned [in petameters (10^15 meters)]
-RWStructuredBuffer<PointMass> masses : register(u1);
+RWStructuredBuffer<PointMass> masses : register(u0);
+RWStructuredBuffer<Motion> motions : register(u1); 
 RWStructuredBuffer<float> readout : register(u2);
 
 float numMasses;
 float deltaTime;
+float halfDeltaTime;
 
-float4x4 m;
+float4x4 worldToScreenMatrix;
 
 inline float3 hueToRGB(float H)
 {
@@ -34,15 +41,18 @@ inline float3 hueToRGB(float H)
 void StepSimulation(uint3 id : SV_DispatchThreadID)
 {
 	float3 pos = masses[id.x].position;
-	float3 vel = velocities[id.x];
+	Motion m = motions[id.x];
+	float3 vel = m.velocity;
 	float3 accel = 0;
+
+	//PointMass p = masses[0]; // initialize struct
 
 	for (int i = 0; i < numMasses; ++i) // calculate net acceleration
 	{
 		PointMass p = masses[i];
 		float mass = p.mass;
 		float3 deltaPos = p.position - pos;
-		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.000001f);
+		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0001f);
 		float3 cbInvDist = invDist * invDist * invDist;
 
 		accel += deltaPos * (G_u * mass * cbInvDist);
@@ -50,21 +60,28 @@ void StepSimulation(uint3 id : SV_DispatchThreadID)
 
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
 
-	pos += (vel + accel * 0.5f) * deltaTime; // leapfrog integration
-	vel += accel * deltaTime;
+	// vel += m.acceleration * halfDeltaTime; // kick-drift-kick integration
+	// pos += vel * deltaTime;
+	// vel += accel * halfDeltaTime;
 
-	masses[id.x].position = pos;
-	velocities[id.x] = vel;
+	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // velocity Verlet integration
+	vel += (m.acceleration + accel) * halfDeltaTime;
 
-	float4 v = mul(m, float4(pos, 1)); // transform world space position to screen space
+	masses[id.x].position = pos; // save state
+	m.velocity = vel;
+	m.acceleration = accel;
+	motions[id.x] = m;
+
+	// Rendering
+	float4 v = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
 	float w = v.w;
 	v /= w;
-
+	
 	float j = length(vel) * 0.0025;
-
+	
 	if (v.x >= 0 && v.y >= 0)
 	{
-		renderTexture[(float2) v] += w > 0 ? float4(hueToRGB(j), 1.0) : 0;
+		renderTexture[(float2) v] = w > 0 ? float4(hueToRGB(j), 1.0) : 0;
 	}
 }
 
@@ -74,27 +91,24 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 	if (id.x == 0)
 	{
 		readout[0] = 0;
+		readout[1] = 0;
 	}
 
 	PointMass p = masses[id.x];
-
 	float Gm = G_u * p.mass;
+	float vel = motions[id.x].velocity;
+	vel *= vel;
+
 	for (int i = 0; i < numMasses; ++i)
 	{
-		if (i != id.x)
+		PointMass po = masses[i];
+		float dist = distance(p.position, po.position);
+		if (i == id.x)
 		{
-			PointMass po = masses[i];
-			float dist = distance(p.position, po.position);
-			readout[0] -= Gm * po.mass / dist;
-		}
-	}
-
-	float vel = velocities[id.x];
-
-	for (int j = 0; j < numMasses; ++j) {
-		if (j == id.x)
+			readout[0] += 0.5 * p.mass * vel;
+		} else
 		{
-			readout[0] += 0.5 * p.mass * vel * vel;
+			readout[1] -= Gm * po.mass / dist;
 		}
 	}
 }

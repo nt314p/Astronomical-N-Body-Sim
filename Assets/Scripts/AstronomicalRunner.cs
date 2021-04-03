@@ -2,8 +2,14 @@
 
 public struct PointMass
 {
-    public float mass;
-    public Vector3 position;
+    public float Mass;
+    public Vector3 Position;
+};
+
+public struct Motion
+{
+    public Vector3 Velocity;
+    public Vector3 Acceleration;
 };
 
 public class AstronomicalRunner : MonoBehaviour
@@ -21,28 +27,28 @@ public class AstronomicalRunner : MonoBehaviour
     private RenderTexture renderTexture;
 
     private PointMass[] masses;
-    private Vector3[] velocities;
+    private Motion[] motions;
 
     //[SerializeField] private Transform parentCanvas = null;
     //[SerializeField] private GameObject obj;
     //private RectTransform[] massTransforms;
 
     private ComputeBuffer massesBuffer;
-    private ComputeBuffer velocitiesBuffer;
+    private ComputeBuffer motionsBuffer;
     private ComputeBuffer readout;
 
-    private int StepSimId;
-    private int CompEnergyId;
-    private int ProcessTextureId;
+    private int stepSimId;
+    private int compEnergyId;
+    private int processTextureId;
 
     private void OnEnable()
     {
-        StepSimId = computeShader.FindKernel("StepSimulation");
-        CompEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
-        ProcessTextureId = computeShader.FindKernel("ProcessTexture");
+        stepSimId = computeShader.FindKernel("StepSimulation");
+        compEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
+        processTextureId = computeShader.FindKernel("ProcessTexture");
 
         masses = new PointMass[numMasses];
-        velocities = new Vector3[numMasses];
+        motions = new Motion[numMasses];
         //massTransforms = new RectTransform[numMasses];
 
         for (int i = 0; i < numMasses; i++) // Change point mass creation here
@@ -51,16 +57,17 @@ public class AstronomicalRunner : MonoBehaviour
             pos.z = pos.y;
             pos.y = Random.Range(-2, 2);
 
-            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.00035f; // circular motion
+            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.015f; // circular motion
             //pos.x += 1000;
 
             PointMass p = new PointMass
             {
-                mass = 600000000000,
-                position = pos,
+                Mass = 600000000000,
+                Position = pos,
             };
 
-            velocities[i] = vel;
+            motions[i].Velocity = vel;
+            motions[i].Acceleration = Vector3.zero;
             masses[i] = p;
         }
 
@@ -74,28 +81,28 @@ public class AstronomicalRunner : MonoBehaviour
         massesBuffer = new ComputeBuffer(numMasses, 16);
         massesBuffer.SetData(masses);
 
-        velocitiesBuffer = new ComputeBuffer(numMasses, 12);
-        velocitiesBuffer.SetData(velocities);
+        motionsBuffer = new ComputeBuffer(numMasses, 24);
+        motionsBuffer.SetData(motions);
 
         computeShader.SetFloat("numMasses", numMasses);
-        computeShader.SetBuffer(StepSimId, "masses", massesBuffer);
-        computeShader.SetBuffer(StepSimId, "velocities", velocitiesBuffer);
+        computeShader.SetBuffer(stepSimId, "masses", massesBuffer);
+        computeShader.SetBuffer(stepSimId, "motions", motionsBuffer);
 
-        computeShader.SetBuffer(CompEnergyId, "masses", massesBuffer);
-        computeShader.SetBuffer(CompEnergyId, "velocities", velocitiesBuffer);
+        computeShader.SetBuffer(compEnergyId, "masses", massesBuffer);
+        computeShader.SetBuffer(compEnergyId, "motions", motionsBuffer);
 
-        readout = new ComputeBuffer(1, 4);
-        readout.SetData(new float[] { 0 });
-        computeShader.SetBuffer(CompEnergyId, "readout", readout);
+        readout = new ComputeBuffer(2, 4);
+        readout.SetData(new float[] { 0, 0 });
+        computeShader.SetBuffer(compEnergyId, "readout", readout);
     }
 
     private void OnDisable()
     {
         massesBuffer.Release();
-        velocitiesBuffer.Release();
+        motionsBuffer.Release();
         readout.Release();
         massesBuffer = null;
-        velocitiesBuffer = null;
+        motionsBuffer = null;
         readout = null;
     }
 
@@ -106,12 +113,13 @@ public class AstronomicalRunner : MonoBehaviour
         Matrix4x4 m = viewToScreen * clipToViewportMatrix * cam.projectionMatrix * cam.worldToCameraMatrix;
         // Matrix derived by Wokarol
 
-        computeShader.SetMatrix("m", m); // matrix to convert world space position to screen space
+        computeShader.SetMatrix("worldToScreenMatrix", m); // matrix to convert world space position to screen space
         computeShader.SetFloat("deltaTime", deltaTime);
-        computeShader.Dispatch(StepSimId, numMasses / 256, 1, 1); // compute a single step from the simulation
+        computeShader.SetFloat("halfDeltaTime", deltaTime*0.5f);
+        computeShader.Dispatch(stepSimId, numMasses / 256, 1, 1); // compute a single step from the simulation
         if (useFadeProcessing)
         {
-            computeShader.Dispatch(ProcessTextureId, (renderTexture.width / 32) + 1, (renderTexture.height / 8) + 1, 1);
+            computeShader.Dispatch(processTextureId, (renderTexture.width / 32) + 1, (renderTexture.height / 8) + 1, 1);
         }
 
         //positionsBuffer.GetData(positions); // obtain position data
@@ -127,15 +135,13 @@ public class AstronomicalRunner : MonoBehaviour
 
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
-            computeShader.SetTexture(StepSimId, "renderTexture", renderTexture);
-            computeShader.SetTexture(ProcessTextureId, "renderTexture", renderTexture);
-
-
+            computeShader.SetTexture(stepSimId, "renderTexture", renderTexture);
+            computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
         }
 
-        UpdateMasses(Time.deltaTime * timeStep);
+        UpdateMasses(Time.deltaTime * timeStep) ;
 
-        //LogTotalEnergy();
+        LogTotalEnergy();
 
         Graphics.Blit(renderTexture, destination);
 
@@ -147,10 +153,11 @@ public class AstronomicalRunner : MonoBehaviour
 
     private void LogTotalEnergy()
     {
-        computeShader.Dispatch(CompEnergyId, numMasses / 128, 1, 1);
-        var readoutArr = new float[1];
-        readout.GetData(readoutArr);
-        Debug.Log(readoutArr[0]);
+        computeShader.Dispatch(compEnergyId, numMasses / 128, 1, 1);
+        var readoutArr = new float[2];
+        readout.GetData(readoutArr);          // Kinetic             Potential
+        TextLogger.Log(Time.time + "," + readoutArr[0] + "," + readoutArr[1]);
+        //Debug.Log(readoutArr[0]);
     }
 
     /*
