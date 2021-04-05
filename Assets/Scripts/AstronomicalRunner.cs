@@ -16,13 +16,14 @@ public class AstronomicalRunner : MonoBehaviour
 {
     [SerializeField] private ComputeShader computeShader = null;
     [SerializeField] private Camera cam = null;
-
-
+    
     [SerializeField] private Vector2Int dimensions = Vector2Int.zero;
     [SerializeField] private int numMasses = 0; // should be a multiple of 128
     [SerializeField] private bool useScreenDimensions = false;
     [SerializeField] private bool useFadeProcessing = false;
     [SerializeField] private float timeStep = 1;
+    [SerializeField] private bool freezeSimulation = false;
+
 
     private RenderTexture renderTexture;
 
@@ -35,17 +36,20 @@ public class AstronomicalRunner : MonoBehaviour
 
     private ComputeBuffer massesBuffer;
     private ComputeBuffer motionsBuffer;
-    private ComputeBuffer readout;
+    private ComputeBuffer readoutBuffer;
 
     private int stepSimId;
     private int compEnergyId;
     private int processTextureId;
+    private int renderMassesId;
 
     private void OnEnable()
     {
         stepSimId = computeShader.FindKernel("StepSimulation");
         compEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
         processTextureId = computeShader.FindKernel("ProcessTexture");
+        renderMassesId = computeShader.FindKernel("RenderMasses");
+
 
         masses = new PointMass[numMasses];
         motions = new Motion[numMasses];
@@ -53,16 +57,16 @@ public class AstronomicalRunner : MonoBehaviour
 
         for (int i = 0; i < numMasses; i++) // Change point mass creation here
         {
-            Vector3 pos = Random.insideUnitCircle * 100;
+            Vector3 pos = Random.insideUnitCircle * 200;
             pos.z = pos.y;
-            pos.y = Random.Range(-2, 2);
+            pos.y = Random.Range(-10, 10);
 
-            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.015f; // circular motion
+            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.0035f; // circular motion
             //pos.x += 1000;
 
             PointMass p = new PointMass
             {
-                Mass = 600000000000,
+                Mass = 1000000000000,
                 Position = pos,
             };
 
@@ -84,36 +88,33 @@ public class AstronomicalRunner : MonoBehaviour
         motionsBuffer = new ComputeBuffer(numMasses, 24);
         motionsBuffer.SetData(motions);
 
-        computeShader.SetFloat("numMasses", numMasses);
+        computeShader.SetInt("numMasses", numMasses);
         computeShader.SetBuffer(stepSimId, "masses", massesBuffer);
         computeShader.SetBuffer(stepSimId, "motions", motionsBuffer);
 
         computeShader.SetBuffer(compEnergyId, "masses", massesBuffer);
         computeShader.SetBuffer(compEnergyId, "motions", motionsBuffer);
+        
+        computeShader.SetBuffer(renderMassesId, "masses", massesBuffer);
+        computeShader.SetBuffer(renderMassesId, "motions", motionsBuffer);
 
-        readout = new ComputeBuffer(2, 4);
-        readout.SetData(new float[] { 0, 0 });
-        computeShader.SetBuffer(compEnergyId, "readout", readout);
+        readoutBuffer = new ComputeBuffer(numMasses, 8);
+        readoutBuffer.SetData(new Vector2[numMasses]);
+        computeShader.SetBuffer(compEnergyId, "readout", readoutBuffer);
     }
 
     private void OnDisable()
     {
         massesBuffer.Release();
         motionsBuffer.Release();
-        readout.Release();
+        readoutBuffer.Release();
         massesBuffer = null;
         motionsBuffer = null;
-        readout = null;
+        readoutBuffer = null;
     }
 
     private void UpdateMasses(float deltaTime)
     {
-        Matrix4x4 viewToScreen = Matrix4x4.Scale(new Vector3(renderTexture.width, renderTexture.height, 1));
-        Matrix4x4 clipToViewportMatrix = Matrix4x4.Translate(Vector3.one * 0.5f) * Matrix4x4.Scale(Vector3.one * 0.5f);
-        Matrix4x4 m = viewToScreen * clipToViewportMatrix * cam.projectionMatrix * cam.worldToCameraMatrix;
-        // Matrix derived by Wokarol
-
-        computeShader.SetMatrix("worldToScreenMatrix", m); // matrix to convert world space position to screen space
         computeShader.SetFloat("deltaTime", deltaTime);
         computeShader.SetFloat("halfDeltaTime", deltaTime*0.5f);
         computeShader.Dispatch(stepSimId, numMasses / 256, 1, 1); // compute a single step from the simulation
@@ -123,6 +124,19 @@ public class AstronomicalRunner : MonoBehaviour
         }
 
         //positionsBuffer.GetData(positions); // obtain position data
+    }
+
+    private void RenderMasses()
+    {
+        Matrix4x4 viewToScreen = Matrix4x4.Scale(new Vector3(renderTexture.width, renderTexture.height, 1));
+        Matrix4x4 clipToViewportMatrix = Matrix4x4.Translate(Vector3.one * 0.5f) * Matrix4x4.Scale(Vector3.one * 0.5f);
+        Matrix4x4 m = viewToScreen * clipToViewportMatrix * cam.projectionMatrix * cam.worldToCameraMatrix;
+        // Matrix derived by Wokarol
+
+        computeShader.SetMatrix("worldToScreenMatrix", m); // matrix to convert world space position to screen space
+        computeShader.SetVector("cameraPosition", cam.transform.position);
+        
+        computeShader.Dispatch(renderMassesId, numMasses / 128, 1, 1);
     }
 
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
@@ -135,13 +149,18 @@ public class AstronomicalRunner : MonoBehaviour
 
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
-            computeShader.SetTexture(stepSimId, "renderTexture", renderTexture);
+            computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
             computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
         }
 
-        UpdateMasses(Time.deltaTime * timeStep) ;
-
-        LogTotalEnergy();
+        if (!freezeSimulation)
+        {
+            UpdateMasses(Time.deltaTime * timeStep) ;
+        }
+        
+        RenderMasses();
+        
+        //LogTotalEnergy();
 
         Graphics.Blit(renderTexture, destination);
 
@@ -151,12 +170,29 @@ public class AstronomicalRunner : MonoBehaviour
         }
     }
 
+    public void Freeze(bool state)
+    {
+        freezeSimulation = state;
+    }
+
+    public RenderTexture GetRenderTexture()
+    {
+        return renderTexture;
+    }
+
     private void LogTotalEnergy()
     {
         computeShader.Dispatch(compEnergyId, numMasses / 128, 1, 1);
-        var readoutArr = new float[2];
-        readout.GetData(readoutArr);          // Kinetic             Potential
-        TextLogger.Log(Time.time + "," + readoutArr[0] + "," + readoutArr[1]);
+        var readoutArr = new Vector2[numMasses];
+        readoutBuffer.GetData(readoutArr);          // Kinetic             Potential    Total
+
+        var total = Vector2.zero;
+
+        for (var i = 0; i < numMasses; i++)
+        {
+            total += readoutArr[i];
+        }
+        TextLogger.Log(Time.time + "," + total.x + "," + total.y + "," + (total.x + total.y));
         //Debug.Log(readoutArr[0]);
     }
 

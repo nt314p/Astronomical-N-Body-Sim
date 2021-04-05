@@ -1,8 +1,11 @@
-﻿#pragma kernel StepSimulation
+﻿#pragma enable_d3d11_debug_symbols
+#pragma kernel StepSimulation
 #pragma kernel ComputeTotalEnergy
 #pragma kernel ProcessTexture
+#pragma kernel RenderMasses
 
-#define G_u 0.0000000000667408
+#define threadsX 256 // threads per group
+#define G_u 0.0000000000667408 // universal gravitational constant
 #define a_b 0.06637 // acceleration due to a 10^30 kg mass at 1 exameter away (10^15 m)
 
 struct PointMass
@@ -18,14 +21,16 @@ struct Motion
 };
 
 RWTexture2D<float4> renderTexture;
-
 RWStructuredBuffer<PointMass> masses : register(u0);
 RWStructuredBuffer<Motion> motions : register(u1); 
-RWStructuredBuffer<float> readout : register(u2);
+RWStructuredBuffer<float2> readout : register(u2);
 
-float numMasses;
+groupshared PointMass threadGroupPointMasses[256]; // thread group shared memory buffer
+
+uint numMasses;
 float deltaTime;
 float halfDeltaTime;
+float3 cameraPosition;
 
 float4x4 worldToScreenMatrix;
 
@@ -37,26 +42,61 @@ inline float3 hueToRGB(float H)
 	return saturate(float3(R, G, B));
 }
 
-[numthreads(256, 1, 1)]
-void StepSimulation(uint3 id : SV_DispatchThreadID)
+[numthreads(threadsX, 1, 1)]
+void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 {
 	float3 pos = masses[id.x].position;
 	Motion m = motions[id.x];
 	float3 vel = m.velocity;
 	float3 accel = 0;
 
-	//PointMass p = masses[0]; // initialize struct
-
-	for (int i = 0; i < numMasses; ++i) // calculate net acceleration
+	/*
+	for (uint i = 0; i < numMasses; ++i) // calculate net acceleration WORKS GOOD
 	{
 		PointMass p = masses[i];
 		float mass = p.mass;
 		float3 deltaPos = p.position - pos;
-		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0001f);
+		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0000f);
+		float3 cbInvDist = invDist * invDist * invDist;
+		if (id.x != i)
+			accel += deltaPos * (G_u * mass * cbInvDist);
+	}*/
+	
+	for (uint i = 0; i < numMasses / threadsX; ++i) // calculate net acceleration WORKS BETTER
+	{
+		uint index = groupIndex + threadsX * i;
+		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
+		for (uint i2 = 0; i2 < threadsX; ++i2)
+		{
+			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
+			float mass = p.mass;
+			float3 deltaPos = p.position - pos;
+			float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0000f);
+			float3 cbInvDist = invDist * invDist * invDist;
+			if (id.x != index)
+				accel += deltaPos * (G_u * mass * cbInvDist);
+		}
+	}
+
+	/* https://gist.github.com/sebbbi/ba4415339b535d22fb18e2d824564ec4
+	const uint WAVE_LANES = WaveGetLaneCount();
+	const uint WAVE_INDEX = WaveGetLaneIndex();
+	
+	for (int i = 0; i < numMasses / WAVE_LANES; ++i) // calculate net acceleration
+	{
+		PointMass p = masses[i * WAVE_LANES + WAVE_INDEX];
+
+		for (uint i2 = 0; i2 < WAVE_LANES; ++i2)
+		{
+			//PointMass po = WaveReadLaneAt(p, i2);
+		}
+		float mass = p.mass;
+		float3 deltaPos = p.position - pos;
+		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0000f);
 		float3 cbInvDist = invDist * invDist * invDist;
 
 		accel += deltaPos * (G_u * mass * cbInvDist);
-	}
+	}*/
 
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
 
@@ -71,46 +111,51 @@ void StepSimulation(uint3 id : SV_DispatchThreadID)
 	m.velocity = vel;
 	m.acceleration = accel;
 	motions[id.x] = m;
+}
 
-	// Rendering
+[numthreads(128, 1, 1)]
+void RenderMasses(uint3 id : SV_DispatchThreadID)
+{
+	float3 pos = masses[id.x].position;
+	float3 vel = motions[id.x].velocity;
 	float4 v = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
 	float w = v.w;
 	v /= w;
 	
-	float j = length(vel) * 0.0025;
+	float j = length(vel) * 0.0045;
 	
 	if (v.x >= 0 && v.y >= 0)
 	{
-		renderTexture[(float2) v] = w > 0 ? float4(hueToRGB(j), 1.0) : 0;
+		float camDist = distance(cameraPosition, pos);
+		float4 val =  w > 0 ? float4(hueToRGB(j) * 15 * rsqrt(camDist), 1.0) : 0;
+		renderTexture[(float2) v] += val;
+		renderTexture[(float2) v + float2(1, 0)] += val * 0.4;
+		renderTexture[(float2) v + float2(-1, 0)] += val * 0.4;
+		renderTexture[(float2) v + float2(0, 1)] += val * 0.4;
+		renderTexture[(float2) v + float2(0, -1)] += val * 0.4;
 	}
 }
 
 [numthreads(128, 1, 1)]
 void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 {
-	if (id.x == 0)
-	{
-		readout[0] = 0;
-		readout[1] = 0;
-	}
-
 	PointMass p = masses[id.x];
 	float Gm = G_u * p.mass;
 	float vel = motions[id.x].velocity;
-	vel *= vel;
-
-	for (int i = 0; i < numMasses; ++i)
+	float Ekinetic = 0.5f * vel * vel * p.mass;
+	float Epotential = 0;
+	
+	for (uint i = 0; i < numMasses; ++i)
 	{
 		PointMass po = masses[i];
 		float dist = distance(p.position, po.position);
-		if (i == id.x)
+		if (i != id.x)
 		{
-			readout[0] += 0.5 * p.mass * vel;
-		} else
-		{
-			readout[1] -= Gm * po.mass / dist;
+			Epotential -= Gm * po.mass / dist;
 		}
 	}
+
+	readout[id.x] = float2(Ekinetic, Epotential);
 }
 
 
