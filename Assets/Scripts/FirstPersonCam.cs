@@ -1,5 +1,4 @@
 ﻿using System.Globalization;
-using UnityEditor;
 using UnityEngine;
 
 public class FirstPersonCam : MonoBehaviour
@@ -7,13 +6,11 @@ public class FirstPersonCam : MonoBehaviour
     [SerializeField] private float xSensitivity = 4;
     [SerializeField] private float ySensitivity = 4;
     [SerializeField] private float moveSpeed = 80;
-    [SerializeField] private AstronomicalRunner astroRunner;
 
     private float pitch = 0;
     private float yaw = 0;
-
-    private bool isFrozen = false;
-
+    public bool Locked { get; set; }
+    
     private void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
@@ -21,34 +18,17 @@ public class FirstPersonCam : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            Application.Quit();
-        }
 
-        if (Input.GetKeyDown(KeyCode.F))
-        {
-            isFrozen = !isFrozen;
-            astroRunner.Freeze(isFrozen);
-        }
 
-        if (Input.GetKeyDown((KeyCode.F1)))
-        {
-            var rt = astroRunner.GetRenderTexture();
-            var texture = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
-            RenderTexture.active = rt;
-            texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
-            RenderTexture.active = null;
 
-            var bytes = texture.EncodeToPNG();
-            var name = System.DateTime.Now.ToString(CultureInfo.CurrentCulture);
-            name = name.Replace('/', '-');
-            var path = "Assets/Resources/screenshot.png";
-            System.IO.File.WriteAllBytes(path, bytes);
-            Debug.Log("Saved screenshot!");
+
+
+
+        if (!Locked)
+        {
+            ProcessLook();
+            ProcessMovement();
         }
-        ProcessLook();
-        ProcessMovement();
     }
 
     private void ProcessLook()

@@ -7,6 +7,7 @@
 #define threadsX 256 // threads per group
 #define G_u 0.0000000000667408 // universal gravitational constant
 #define a_b 0.06637 // acceleration due to a 10^30 kg mass at 1 exameter away (10^15 m)
+#define particleRadius 6
 
 struct PointMass
 {
@@ -122,17 +123,42 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	float w = v.w;
 	v /= w;
 	
-	float j = length(vel) * 0.0045;
+	float j = (length(vel)-10) * 0.0045;
 	
 	if (v.x >= 0 && v.y >= 0)
 	{
 		float camDist = distance(cameraPosition, pos);
-		float4 val =  w > 0 ? float4(hueToRGB(j) * 15 * rsqrt(camDist), 1.0) : 0;
+		float4 val =  w > 0 ? float4(hueToRGB(j) * 16 * rsqrt(camDist), 1.0) : 0;
 		renderTexture[(float2) v] += val;
-		renderTexture[(float2) v + float2(1, 0)] += val * 0.4;
-		renderTexture[(float2) v + float2(-1, 0)] += val * 0.4;
-		renderTexture[(float2) v + float2(0, 1)] += val * 0.4;
-		renderTexture[(float2) v + float2(0, -1)] += val * 0.4;
+
+		[unroll((particleRadius + 1) * (particleRadius + 1))]
+		for (int i = 0; i < (particleRadius + 1) * (particleRadius + 1); ++i)
+		{
+			int cx = i / (particleRadius * 2 + 1) - particleRadius;
+			int cy = i % (particleRadius * 2 + 1) - particleRadius;
+			float cdist = cx * cx + cy * cy;
+			float intensity = cdist != 0 ? 0.2 / cdist : 1;
+			//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
+			renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
+			renderTexture[(float2) v + float2(cx, cy)] *= 0.99;	
+		}
+
+		/*
+		for (int cx = -particleRadius; cx <= particleRadius; ++cx)
+		{
+			for (int cy = -particleRadius; cy <= particleRadius; ++cy)
+			{
+				float cdist = cx * cx + cy * cy;
+				float intensity = cdist != 0 ? 0.2 / cdist : 1;
+				//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
+                renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
+				renderTexture[(float2) v + float2(cx, cy)] *= 0.99;		
+			}
+		}*/
+		// renderTexture[(float2) v + float2(1, 0)] += val * 0.4;
+		// renderTexture[(float2) v + float2(-1, 0)] += val * 0.4;
+		// renderTexture[(float2) v + float2(0, 1)] += val * 0.4;
+		// renderTexture[(float2) v + float2(0, -1)] += val * 0.4;
 	}
 }
 
@@ -164,6 +190,6 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 void ProcessTexture(uint3 id : SV_DispatchThreadID)
 {
 	float4 originalValue = renderTexture[id.xy];
-	float4 fadedValue = max(0, originalValue - 0.1 * deltaTime);
+	float4 fadedValue = max(0, originalValue - 0.05);
 	renderTexture[id.xy] = fadedValue;
 }

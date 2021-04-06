@@ -1,13 +1,11 @@
-﻿using UnityEngine;
-using System.IO;
+﻿using System.IO;
 
-public class TextLogger : MonoBehaviour
+public class TextLogger
 {
     public static void Log(string message)
     {
-        string path = "Assets/Resources/log.txt";
-
-        StreamWriter writer = new StreamWriter(path, true);
+        var path = "Assets/Resources/log.txt";
+        var writer = new StreamWriter(path, true);
         writer.WriteLine(message);
         writer.Close();
     }
