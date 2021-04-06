@@ -32,7 +32,6 @@ uint numMasses;
 float deltaTime;
 float halfDeltaTime;
 float3 cameraPosition;
-
 float4x4 worldToScreenMatrix;
 
 inline float3 hueToRGB(float H)
@@ -50,34 +49,26 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	Motion m = motions[id.x];
 	float3 vel = m.velocity;
 	float3 accel = 0;
-
-	/*
-	for (uint i = 0; i < numMasses; ++i) // calculate net acceleration WORKS GOOD
-	{
-		PointMass p = masses[i];
-		float mass = p.mass;
-		float3 deltaPos = p.position - pos;
-		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0000f);
-		float3 cbInvDist = invDist * invDist * invDist;
-		if (id.x != i)
-			accel += deltaPos * (G_u * mass * cbInvDist);
-	}*/
 	
-	for (uint i = 0; i < numMasses / threadsX; ++i) // calculate net acceleration WORKS BETTER
+	for (uint i = 0; i < numMasses; i += threadsX) // calculate net acceleration WORKS BETTER
 	{
-		uint index = groupIndex + threadsX * i;
+		uint index = groupIndex + i;
 		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
 		for (uint i2 = 0; i2 < threadsX; ++i2)
 		{
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
 			float mass = p.mass;
 			float3 deltaPos = p.position - pos;
-			float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0000f);
-			float3 cbInvDist = invDist * invDist * invDist;
+			float3 invDist = rsqrt(dot(deltaPos, deltaPos));
+			float3 cubeInverse = invDist * invDist * invDist;
 			if (id.x != index)
-				accel += deltaPos * (G_u * mass * cbInvDist);
+			{
+				accel += deltaPos * (mass * cubeInverse);
+			}
 		}
 	}
+
+	accel *= G_u;
 
 	/* https://gist.github.com/sebbbi/ba4415339b535d22fb18e2d824564ec4
 	const uint WAVE_LANES = WaveGetLaneCount();
@@ -124,42 +115,41 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	v /= w;
 	
 	float j = (length(vel)-10) * 0.0045;
-	
-	if (v.x >= 0 && v.y >= 0)
-	{
-		float camDist = distance(cameraPosition, pos);
-		float4 val =  w > 0 ? float4(hueToRGB(j) * 16 * rsqrt(camDist), 1.0) : 0;
-		renderTexture[(float2) v] += val;
 
-		[unroll((particleRadius + 1) * (particleRadius + 1))]
-		for (int i = 0; i < (particleRadius + 1) * (particleRadius + 1); ++i)
+	float camDist = distance(cameraPosition, pos);
+	float4 val =  w > 0 && v.x >= 0 && v.y >= 0 ? float4(hueToRGB(j) * 16 * rsqrt(camDist), 1.0) : 0;
+	renderTexture[(float2) v] += val;
+
+	/*
+	[unroll((particleRadius + 1) * (particleRadius + 1))]
+	for (int i = 0; i < (particleRadius + 1) * (particleRadius + 1); ++i)
+	{
+		int cx = i / (particleRadius * 2 + 1) - particleRadius;
+		int cy = i % (particleRadius * 2 + 1) - particleRadius;
+		float cdist = cx * cx + cy * cy;
+		float intensity = cdist != 0 ? 0.3 / cdist : 1;
+		//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
+		renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
+		renderTexture[(float2) v + float2(cx, cy)] *= 0.99;	
+	}
+
+	/*
+	for (int cx = -particleRadius; cx <= particleRadius; ++cx)
+	{
+		for (int cy = -particleRadius; cy <= particleRadius; ++cy)
 		{
-			int cx = i / (particleRadius * 2 + 1) - particleRadius;
-			int cy = i % (particleRadius * 2 + 1) - particleRadius;
 			float cdist = cx * cx + cy * cy;
 			float intensity = cdist != 0 ? 0.2 / cdist : 1;
 			//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
-			renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
-			renderTexture[(float2) v + float2(cx, cy)] *= 0.99;	
+            renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
+			renderTexture[(float2) v + float2(cx, cy)] *= 0.99;		
 		}
-
-		/*
-		for (int cx = -particleRadius; cx <= particleRadius; ++cx)
-		{
-			for (int cy = -particleRadius; cy <= particleRadius; ++cy)
-			{
-				float cdist = cx * cx + cy * cy;
-				float intensity = cdist != 0 ? 0.2 / cdist : 1;
-				//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
-                renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
-				renderTexture[(float2) v + float2(cx, cy)] *= 0.99;		
-			}
-		}*/
-		// renderTexture[(float2) v + float2(1, 0)] += val * 0.4;
-		// renderTexture[(float2) v + float2(-1, 0)] += val * 0.4;
-		// renderTexture[(float2) v + float2(0, 1)] += val * 0.4;
-		// renderTexture[(float2) v + float2(0, -1)] += val * 0.4;
-	}
+	}*/
+	renderTexture[(float2) v + float2(1, 0)] += val * 0.4;
+	renderTexture[(float2) v + float2(-1, 0)] += val * 0.4;
+	renderTexture[(float2) v + float2(0, 1)] += val * 0.4;
+	renderTexture[(float2) v + float2(0, -1)] += val * 0.4;
+	
 }
 
 [numthreads(128, 1, 1)]

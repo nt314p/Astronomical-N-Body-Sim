@@ -134,7 +134,6 @@ GameObject:
   - component: {fileID: 963194228}
   - component: {fileID: 963194227}
   - component: {fileID: 963194229}
-  - component: {fileID: 963194226}
   - component: {fileID: 963194230}
   m_Layer: 0
   m_Name: Main Camera
@@ -143,22 +142,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &963194226
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 963194225}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a41779fd9c68a50439935f1f053e2269, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  computeShader: {fileID: 7200000, guid: 2f3933c349923df4a83e341e68e17104, type: 3}
-  cam: {fileID: 963194227}
-  numMasses: 25600
-  useFadeProcessing: 0
 --- !u!20 &963194227
 Camera:
   m_ObjectHideFlags: 0
@@ -243,11 +226,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c5f47a6a9fff1445a2795ae5c50843a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  astroRunner: {fileID: 963194226}
+  computeShader: {fileID: 7200000, guid: 2f3933c349923df4a83e341e68e17104, type: 3}
+  cam: {fileID: 963194227}
+  firstPersonCamera: {fileID: 963194229}
   useScreenDimensions: 1
   textureDimensions: {x: 800, y: 450}
   timeStep: 0.2
-  FreezeSimulation: 0
+  freezeSimulation: 0
+  useFadeProcessing: 0
+  renderMasses: 1
+  lockCamera: 0
 --- !u!850595691 &1954924563
 LightingSettings:
   m_ObjectHideFlags: 0

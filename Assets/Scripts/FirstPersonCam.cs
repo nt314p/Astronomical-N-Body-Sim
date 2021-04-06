@@ -16,19 +16,10 @@ public class FirstPersonCam : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
     }
 
-    private void Update()
+    public void ProcessCamera()
     {
-
-
-
-
-
-
-        if (!Locked)
-        {
-            ProcessLook();
-            ProcessMovement();
-        }
+        ProcessLook();
+        ProcessMovement();
     }
 
     private void ProcessLook()
