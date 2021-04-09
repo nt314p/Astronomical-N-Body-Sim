@@ -6,12 +6,15 @@ public class AstronomicalRenderer
     private ComputeShader computeShader;
     private RenderTexture renderTexture;
 
+    private AstronomicalSimulator astronomicalSimulator;
+
     private int numMasses;
     private int processTextureId;
     private int renderMassesId;
 
     public AstronomicalRenderer(AstronomicalSimulator astronomicalSimulator, ComputeShader computeShader, Camera camera)
     {
+        this.astronomicalSimulator = astronomicalSimulator;
         this.computeShader = computeShader;
         this.camera = camera;
 
@@ -20,6 +23,12 @@ public class AstronomicalRenderer
 
         numMasses = astronomicalSimulator.NumMasses;
         
+        computeShader.SetBuffer(renderMassesId, "masses", astronomicalSimulator.MassesBuffer);
+        computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
+    }
+
+    public void SetBuffers()
+    {
         computeShader.SetBuffer(renderMassesId, "masses", astronomicalSimulator.MassesBuffer);
         computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
     }

@@ -16,7 +16,7 @@ public class AstronomicalSimulator
 {
     private ComputeShader computeShader;
     private int numMasses; // should be a multiple of 256
-
+    
     public int NumMasses => numMasses;
     public ComputeBuffer MassesBuffer => massesBuffer;
     public ComputeBuffer MotionsBuffer => motionsBuffer;
@@ -31,12 +31,63 @@ public class AstronomicalSimulator
     public AstronomicalSimulator(ComputeShader computeShader, SimulationState simulationState)
     {
         this.computeShader = computeShader;
-
-        numMasses = simulationState.NumMasses();
-
+        
         stepSimId = computeShader.FindKernel("StepSimulation");
         compEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
+
+        numMasses = simulationState.NumMasses();
+        readoutBuffer = new ComputeBuffer(numMasses, 8);
+        readoutBuffer.SetData(new Vector2[numMasses]);
+        computeShader.SetBuffer(compEnergyId, "readout", readoutBuffer);
         
+        SetSimulationState(simulationState);
+    }
+
+    public void ReleaseBuffers()
+    {
+        massesBuffer?.Release();
+        motionsBuffer?.Release();
+        readoutBuffer?.Release();
+        massesBuffer = null;
+        motionsBuffer = null;
+        readoutBuffer = null;
+    }
+
+    public void UpdateMasses(float deltaTime) // compute a single step from the simulation
+    {
+        computeShader.SetFloat("deltaTime", deltaTime);
+        computeShader.SetFloat("halfDeltaTime", deltaTime * 0.5f);
+        computeShader.Dispatch(stepSimId, numMasses / 256, 1, 1); 
+    }
+
+    public SimulationState GetSimulationState()
+    {
+        var massesArr = new PointMass[numMasses];
+        var motionsArr = new Motion[numMasses];
+        massesBuffer.GetData(massesArr);
+        motionsBuffer.GetData(motionsArr);
+
+        var pointMassStates = new PointMassState[numMasses];
+
+        for (var index = 0; index < numMasses; index++)
+        {
+            pointMassStates[index] = new PointMassState
+            {
+                Mass = massesArr[index].Mass,
+                Position = massesArr[index].Position,
+                Velocity = motionsArr[index].Velocity,
+                Acceleration = motionsArr[index].Acceleration
+            };
+        }
+
+        return new SimulationState(pointMassStates);
+    }
+
+    public void SetSimulationState(SimulationState simulationState)
+    {
+        ReleaseBuffers();
+        numMasses = simulationState.NumMasses();
+
         var masses = new PointMass[numMasses];
         var motions = new Motion[numMasses];
         var stateMasses = simulationState.StateMasses;
@@ -45,7 +96,7 @@ public class AstronomicalSimulator
         {
             var stateMass = stateMasses[i];
             masses[i] = new PointMass{Mass= stateMass.Mass, Position = stateMass.Position};
-            motions[i] = new Motion {Velocity = stateMass.Velocity, Acceleration = Vector3.zero};
+            motions[i] = new Motion {Velocity = stateMass.Velocity, Acceleration = stateMass.Acceleration};
         }
 
         massesBuffer = new ComputeBuffer(numMasses, 16);
@@ -60,29 +111,8 @@ public class AstronomicalSimulator
 
         computeShader.SetBuffer(compEnergyId, "masses", massesBuffer);
         computeShader.SetBuffer(compEnergyId, "motions", motionsBuffer);
-
-        readoutBuffer = new ComputeBuffer(numMasses, 8);
-        readoutBuffer.SetData(new Vector2[numMasses]);
-        computeShader.SetBuffer(compEnergyId, "readout", readoutBuffer);
     }
-
-    public void ReleaseBuffers()
-    {
-        massesBuffer.Release();
-        motionsBuffer.Release();
-        readoutBuffer.Release();
-        massesBuffer = null;
-        motionsBuffer = null;
-        readoutBuffer = null;
-    }
-
-    public void UpdateMasses(float deltaTime) // compute a single step from the simulation
-    {
-        computeShader.SetFloat("deltaTime", deltaTime);
-        computeShader.SetFloat("halfDeltaTime", deltaTime * 0.5f);
-        computeShader.Dispatch(stepSimId, numMasses / 256, 1, 1); 
-    }
-
+    
     public Vector3 GetTotalEnergy()
     {
         computeShader.Dispatch(compEnergyId, numMasses / 128, 1, 1);

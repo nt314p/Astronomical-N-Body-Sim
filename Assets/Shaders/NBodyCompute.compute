@@ -110,15 +110,16 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 {
 	float3 pos = masses[id.x].position;
 	float3 vel = motions[id.x].velocity;
-	float4 v = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
-	float w = v.w;
-	v /= w;
+	float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
+	float w = screenPos.w;
+	screenPos /= w;
 	
-	float j = (length(vel)-10) * 0.0045;
+	float j = (length(vel) - 10) * 0.0045;
 
-	float camDist = distance(cameraPosition, pos);
-	float4 val =  w > 0 && v.x >= 0 && v.y >= 0 ? float4(hueToRGB(j) * 16 * rsqrt(camDist), 1.0) : 0;
-	renderTexture[(float2) v] += val;
+	float camDist = min(distance(cameraPosition, pos), 200);
+	float3 color = hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
+	float4 val =  w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
+	renderTexture[(float2) screenPos] += val;
 
 	/*
 	[unroll((particleRadius + 1) * (particleRadius + 1))]
@@ -145,10 +146,10 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 			renderTexture[(float2) v + float2(cx, cy)] *= 0.99;		
 		}
 	}*/
-	renderTexture[(float2) v + float2(1, 0)] += val * 0.4;
-	renderTexture[(float2) v + float2(-1, 0)] += val * 0.4;
-	renderTexture[(float2) v + float2(0, 1)] += val * 0.4;
-	renderTexture[(float2) v + float2(0, -1)] += val * 0.4;
+	renderTexture[(float2) screenPos + float2(1, 0)] += val * 0.4;
+	renderTexture[(float2) screenPos + float2(-1, 0)] += val * 0.4;
+	renderTexture[(float2) screenPos + float2(0, 1)] += val * 0.4;
+	renderTexture[(float2) screenPos + float2(0, -1)] += val * 0.4;
 	
 }
 

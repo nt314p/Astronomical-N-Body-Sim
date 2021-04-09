@@ -1,5 +1,9 @@
 using System.IO;
 using UnityEngine;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.UnityConverters;
+using Newtonsoft.Json.UnityConverters.Math;
 
 public class SimulationManager : MonoBehaviour
 {
@@ -16,9 +20,18 @@ public class SimulationManager : MonoBehaviour
     
     private AstronomicalSimulator astronomicalSimulator;
     private AstronomicalRenderer astronomicalRenderer;
+    private JsonSerializerSettings jsonSettings;
 
     private void OnEnable()
     {
+        jsonSettings = new JsonSerializerSettings {
+            Converters = new JsonConverter[] {
+                new Vector3Converter(),
+                new StringEnumConverter(),
+            },
+            ContractResolver = new UnityTypeContractResolver(),
+        };
+        
         var simulationState = new SimulationState(25600);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
@@ -44,6 +57,16 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.L))
         {
             lockCamera = !lockCamera;
+        }
+
+        if (Input.GetKeyDown(KeyCode.I))
+        {
+            LoadSimulationState();
+        }
+
+        if (Input.GetKeyDown(KeyCode.O))
+        {
+            SaveSimulationState();
         }
         
         if (Input.GetKeyDown((KeyCode.F1)))
@@ -76,6 +99,27 @@ public class SimulationManager : MonoBehaviour
         {
             Graphics.Blit(source, destination);
         }
+    }
+
+    private void SaveSimulationState()
+    {
+        var simulationState = astronomicalSimulator.GetSimulationState();
+        var json = JsonConvert.SerializeObject(simulationState.StateMasses, jsonSettings);
+        var path = "Assets/Resources/saved_state.json";
+        var writer = new StreamWriter(path, false);
+        writer.WriteLine(json);
+        writer.Close();
+        Debug.Log("Saved simulation state");
+    }
+
+    private void LoadSimulationState()
+    {
+        var path = "Assets/Resources/saved_state.json";
+        var reader = new StreamReader(path);
+        var pointMassStates = JsonConvert.DeserializeObject<PointMassState[]>(reader.ReadToEnd());
+        astronomicalSimulator.SetSimulationState(new SimulationState(pointMassStates));
+        astronomicalRenderer.SetBuffers();
+        Debug.Log("Loaded simulation state");
     }
 
     private void SaveScreenshot()

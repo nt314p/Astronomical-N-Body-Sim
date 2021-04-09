@@ -5,6 +5,7 @@ public struct PointMassState
     public float Mass;
     public Vector3 Position;
     public Vector3 Velocity;
+    public Vector3 Acceleration;
 }
 
 public class SimulationState
@@ -31,9 +32,10 @@ public class SimulationState
 
             masses[i] = new PointMassState
             {
-                Mass = 1000000000000,
+                Mass = 2000000000000,
                 Position = pos,
-                Velocity = vel
+                Velocity = vel,
+                Acceleration = Vector3.zero
             };
         }
     }
