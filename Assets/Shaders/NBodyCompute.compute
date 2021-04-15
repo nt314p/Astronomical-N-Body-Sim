@@ -49,6 +49,8 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	Motion m = motions[id.x];
 	float3 vel = m.velocity;
 	float3 accel = 0;
+
+	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // updating position using velocity Verlet integration
 	
 	for (uint i = 0; i < numMasses; i += threadsX) // calculate net acceleration WORKS BETTER
 	{
@@ -59,7 +61,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
 			float mass = p.mass;
 			float3 deltaPos = p.position - pos;
-			float3 invDist = rsqrt(dot(deltaPos, deltaPos));
+			float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.001);
 			float3 cubeInverse = invDist * invDist * invDist;
 			if (id.x != index)
 			{
@@ -69,35 +71,10 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	}
 
 	accel *= G_u;
-
-	/* https://gist.github.com/sebbbi/ba4415339b535d22fb18e2d824564ec4
-	const uint WAVE_LANES = WaveGetLaneCount();
-	const uint WAVE_INDEX = WaveGetLaneIndex();
 	
-	for (int i = 0; i < numMasses / WAVE_LANES; ++i) // calculate net acceleration
-	{
-		PointMass p = masses[i * WAVE_LANES + WAVE_INDEX];
-
-		for (uint i2 = 0; i2 < WAVE_LANES; ++i2)
-		{
-			//PointMass po = WaveReadLaneAt(p, i2);
-		}
-		float mass = p.mass;
-		float3 deltaPos = p.position - pos;
-		float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.0000f);
-		float3 cbInvDist = invDist * invDist * invDist;
-
-		accel += deltaPos * (G_u * mass * cbInvDist);
-	}*/
-
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
 
-	// vel += m.acceleration * halfDeltaTime; // kick-drift-kick integration
-	// pos += vel * deltaTime;
-	// vel += accel * halfDeltaTime;
-
-	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // velocity Verlet integration
-	vel += (m.acceleration + accel) * halfDeltaTime;
+	vel += (m.acceleration + accel) * halfDeltaTime; // updating velocity using velocity Verlet integration
 
 	masses[id.x].position = pos; // save state
 	m.velocity = vel;
@@ -150,7 +127,6 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	renderTexture[(float2) screenPos + float2(-1, 0)] += val * 0.4;
 	renderTexture[(float2) screenPos + float2(0, 1)] += val * 0.4;
 	renderTexture[(float2) screenPos + float2(0, -1)] += val * 0.4;
-	
 }
 
 [numthreads(128, 1, 1)]
@@ -165,7 +141,7 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 	for (uint i = 0; i < numMasses; ++i)
 	{
 		PointMass po = masses[i];
-		float dist = distance(p.position, po.position);
+		float dist = length(p.position - po.position);
 		if (i != id.x)
 		{
 			Epotential -= Gm * po.mass / dist;

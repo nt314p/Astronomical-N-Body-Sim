@@ -39,18 +39,22 @@ public class AstronomicalSimulator
         readoutBuffer = new ComputeBuffer(numMasses, 8);
         readoutBuffer.SetData(new Vector2[numMasses]);
         computeShader.SetBuffer(compEnergyId, "readout", readoutBuffer);
-        
+
         SetSimulationState(simulationState);
     }
 
-    public void ReleaseBuffers()
+    public void ReleaseBuffers(bool releaseReadout = false)
     {
         massesBuffer?.Release();
         motionsBuffer?.Release();
-        readoutBuffer?.Release();
         massesBuffer = null;
         motionsBuffer = null;
-        readoutBuffer = null;
+        
+        if (releaseReadout)
+        {
+            readoutBuffer?.Release();
+            readoutBuffer = null;
+        }
     }
 
     public void UpdateMasses(float deltaTime) // compute a single step from the simulation
@@ -115,6 +119,10 @@ public class AstronomicalSimulator
     
     public Vector3 GetTotalEnergy()
     {
+        if (readoutBuffer == null)
+        {
+            Debug.Log("NULL");
+        }
         computeShader.Dispatch(compEnergyId, numMasses / 128, 1, 1);
         var readoutArr = new Vector2[numMasses];
         readoutBuffer.GetData(readoutArr);

@@ -32,14 +32,14 @@ public class SimulationManager : MonoBehaviour
             ContractResolver = new UnityTypeContractResolver(),
         };
         
-        var simulationState = new SimulationState(25600);
+        var simulationState = new SimulationState(12800);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
     }
 
     private void OnDisable()
     {
-        astronomicalSimulator.ReleaseBuffers();
+        astronomicalSimulator.ReleaseBuffers(true);
     }
 
     private void Update()
@@ -78,6 +78,9 @@ public class SimulationManager : MonoBehaviour
         {
             firstPersonCamera.ProcessCamera();
         }
+
+        var data = astronomicalSimulator.GetTotalEnergy();
+        Debug.Log(data.z);
     }
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
