@@ -22,6 +22,10 @@ public class SimulationManager : MonoBehaviour
     private AstronomicalRenderer astronomicalRenderer;
     private JsonSerializerSettings jsonSettings;
 
+    private float previousEnergy = 0;
+    private float[] energies = new float[20];
+    private int energiesIndex = 0;
+
     private void OnEnable()
     {
         jsonSettings = new JsonSerializerSettings {
@@ -80,14 +84,35 @@ public class SimulationManager : MonoBehaviour
         }
 
         var data = astronomicalSimulator.GetTotalEnergy();
-        Debug.Log(data.z);
+        Debug.Log("Per: " + (data.z - previousEnergy) * 100/ Time.fixedDeltaTime / data.z);
+        Debug.Log("Tot: " + data.z);
+
+        float averageEnergy = 0;
+        for (var index = 0; index < energies.Length; index++)
+        {
+            averageEnergy += energies[index];
+        }
+
+        averageEnergy /= energies.Length;
+        Debug.Log("Avg: " + averageEnergy);
+        
+        previousEnergy = data.z;
+        energies[energiesIndex] = previousEnergy;
+        energiesIndex++;
+
+        if (energiesIndex == energies.Length)
+        {
+            energiesIndex = 0;
+        }
+
+        //TextLogger.Log($"{Time.time},{data.z}");
     }
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
         if (!freezeSimulation)
         {
-            astronomicalSimulator.UpdateMasses(Time.deltaTime * timeStep);
+            astronomicalSimulator.UpdateMasses(Time.fixedDeltaTime * timeStep);
         }
 
         if (renderMasses)

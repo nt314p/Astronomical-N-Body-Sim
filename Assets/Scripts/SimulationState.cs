@@ -23,16 +23,16 @@ public class SimulationState
         
         for (var i = 0; i < numMasses; i++) // create a little galaxy
         {
-            Vector3 pos = Random.insideUnitCircle * 200;
+            Vector3 pos = Random.insideUnitCircle * 100;
             pos.z = pos.y;
             pos.y = Random.Range(-10, 10);
 
-            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.0045f; // circular motion
+            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.1000f; // circular motion
             //pos.x += 1000;
 
             masses[i] = new PointMassState
             {
-                Mass = 1000000000000,
+                Mass = 50000000000000,
                 Position = pos,
                 Velocity = vel,
                 Acceleration = Vector3.zero

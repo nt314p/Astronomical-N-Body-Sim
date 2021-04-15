@@ -26,7 +26,7 @@ RWStructuredBuffer<PointMass> masses : register(u0);
 RWStructuredBuffer<Motion> motions : register(u1); 
 RWStructuredBuffer<float2> readout : register(u2);
 
-groupshared PointMass threadGroupPointMasses[256]; // thread group shared memory buffer
+groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
 
 uint numMasses;
 float deltaTime;
@@ -51,7 +51,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	float3 accel = 0;
 
 	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // updating position using velocity Verlet integration
-	
+
 	for (uint i = 0; i < numMasses; i += threadsX) // calculate net acceleration WORKS BETTER
 	{
 		uint index = groupIndex + i;
@@ -61,7 +61,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
 			float mass = p.mass;
 			float3 deltaPos = p.position - pos;
-			float3 invDist = rsqrt(dot(deltaPos, deltaPos) + 0.001);
+			float3 invDist = rsqrt(dot(deltaPos, deltaPos));
 			float3 cubeInverse = invDist * invDist * invDist;
 			if (id.x != index)
 			{
@@ -73,6 +73,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	accel *= G_u;
 	
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
+
 
 	vel += (m.acceleration + accel) * halfDeltaTime; // updating velocity using velocity Verlet integration
 
@@ -147,6 +148,8 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 			Epotential -= Gm * po.mass / dist;
 		}
 	}
+	
+	Epotential *= 0.5; // correct duplicate pairwise interaction counts
 
 	readout[id.x] = float2(Ekinetic, Epotential);
 }
