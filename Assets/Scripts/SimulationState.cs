@@ -27,12 +27,12 @@ public class SimulationState
             pos.z = pos.y;
             pos.y = Random.Range(-10, 10);
 
-            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.1000f; // circular motion
+            var vel = Vector3.Cross(pos, Vector3.up).normalized * pos.sqrMagnitude * 0.06500f; // circular motion
             //pos.x += 1000;
 
             masses[i] = new PointMassState
             {
-                Mass = 50000000000000,
+                Mass = 5000000000000,
                 Position = pos,
                 Velocity = vel,
                 Acceleration = Vector3.zero

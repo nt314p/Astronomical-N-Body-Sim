@@ -36,7 +36,7 @@ public class SimulationManager : MonoBehaviour
             ContractResolver = new UnityTypeContractResolver(),
         };
         
-        var simulationState = new SimulationState(12800);
+        var simulationState = new SimulationState(38400);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
     }
@@ -73,9 +73,19 @@ public class SimulationManager : MonoBehaviour
             SaveSimulationState();
         }
         
-        if (Input.GetKeyDown((KeyCode.F1)))
+        if (Input.GetKeyDown(KeyCode.F1))
         {
             SaveScreenshot();
+        }
+
+        if (Input.GetKeyDown(KeyCode.Period))
+        {
+            timeStep *= 2;
+        }
+
+        if (Input.GetKeyDown(KeyCode.Comma))
+        {
+            timeStep *= 0.5f;
         }
 
         if (!lockCamera)
@@ -83,6 +93,11 @@ public class SimulationManager : MonoBehaviour
             firstPersonCamera.ProcessCamera();
         }
 
+        //TextLogger.Log($"{Time.time},{data.z}");
+    }
+
+    private void LogEnergies()
+    {
         var data = astronomicalSimulator.GetTotalEnergy();
         Debug.Log("Per: " + (data.z - previousEnergy) * 100/ Time.fixedDeltaTime / data.z);
         Debug.Log("Tot: " + data.z);
@@ -104,8 +119,6 @@ public class SimulationManager : MonoBehaviour
         {
             energiesIndex = 0;
         }
-
-        //TextLogger.Log($"{Time.time},{data.z}");
     }
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)

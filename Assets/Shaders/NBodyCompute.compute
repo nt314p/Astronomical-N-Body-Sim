@@ -4,7 +4,7 @@
 #pragma kernel ProcessTexture
 #pragma kernel RenderMasses
 
-#define threadsX 256 // threads per group
+#define threadsX 512 // threads per group
 #define G_u 0.0000000000667408 // universal gravitational constant
 #define a_b 0.06637 // acceleration due to a 10^30 kg mass at 1 exameter away (10^15 m)
 #define particleRadius 6
@@ -56,6 +56,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	{
 		uint index = groupIndex + i;
 		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
+		[unroll(threadsX)]
 		for (uint i2 = 0; i2 < threadsX; ++i2)
 		{
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
@@ -92,7 +93,7 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	float w = screenPos.w;
 	screenPos /= w;
 	
-	float j = (length(vel) - 10) * 0.0045;
+	float j = (length(vel) - 10) * 0.0015;
 
 	float camDist = min(distance(cameraPosition, pos), 200);
 	float3 color = hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);

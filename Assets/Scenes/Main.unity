@@ -231,7 +231,7 @@ MonoBehaviour:
   firstPersonCamera: {fileID: 963194229}
   useScreenDimensions: 1
   textureDimensions: {x: 1920, y: 1080}
-  timeStep: 0.1
+  timeStep: 0.05
   freezeSimulation: 0
   useFadeProcessing: 0
   renderMasses: 1

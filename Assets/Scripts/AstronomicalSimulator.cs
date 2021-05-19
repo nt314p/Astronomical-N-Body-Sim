@@ -14,6 +14,7 @@ public struct Motion
 
 public class AstronomicalSimulator
 {
+    private const int computeThreads = 512;
     private ComputeShader computeShader;
     private int numMasses; // should be a multiple of 256
     
@@ -61,7 +62,7 @@ public class AstronomicalSimulator
     {
         computeShader.SetFloat("deltaTime", deltaTime);
         computeShader.SetFloat("halfDeltaTime", deltaTime * 0.5f);
-        computeShader.Dispatch(stepSimId, numMasses / 256, 1, 1); 
+        computeShader.Dispatch(stepSimId, numMasses / computeThreads, 1, 1); 
     }
 
     public SimulationState GetSimulationState()
