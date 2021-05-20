@@ -21,10 +21,10 @@ struct Motion
 	float3 acceleration;
 };
 
-RWTexture2D<float4> renderTexture;
 RWStructuredBuffer<PointMass> masses : register(u0);
 RWStructuredBuffer<Motion> motions : register(u1); 
 RWStructuredBuffer<float2> readout : register(u2);
+RWTexture2D<float4> renderTexture :register(u3);
 
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
 
@@ -34,12 +34,12 @@ float halfDeltaTime;
 float3 cameraPosition;
 float4x4 worldToScreenMatrix;
 
-inline float3 hueToRGB(float H)
+inline float3 hueToRGB(float h)
 {
-	float R = abs(H * 6 - 3) - 1;
-	float G = 2 - abs(H * 6 - 2);
-	float B = 2 - abs(H * 6 - 4);
-	return saturate(float3(R, G, B));
+	float r = abs(h * 6 - 3) - 1;
+	float g = 2 - abs(h * 6 - 2);
+	float b = 2 - abs(h * 6 - 4);
+	return saturate(float3(r, g, b));
 }
 
 [numthreads(threadsX, 1, 1)]
@@ -49,6 +49,8 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	Motion m = motions[id.x];
 	float3 vel = m.velocity;
 	float3 accel = 0;
+
+	GroupMemoryBarrierWithGroupSync();
 
 	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // updating position using velocity Verlet integration
 
@@ -75,7 +77,6 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
 
-
 	vel += (m.acceleration + accel) * halfDeltaTime; // updating velocity using velocity Verlet integration
 
 	masses[id.x].position = pos; // save state
@@ -93,9 +94,9 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	float w = screenPos.w;
 	screenPos /= w;
 	
-	float j = (length(vel) - 10) * 0.0015;
+	float j = (length(vel) - 10) * 0.0045;
 
-	float camDist = min(distance(cameraPosition, pos), 200);
+	//float camDist = min(distance(cameraPosition, pos), 200);
 	float3 color = hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
 	float4 val =  w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
 	renderTexture[(float2) screenPos] += val;

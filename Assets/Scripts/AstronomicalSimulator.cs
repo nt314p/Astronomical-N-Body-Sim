@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 public struct PointMass
 {
@@ -14,7 +15,9 @@ public struct Motion
 
 public class AstronomicalSimulator
 {
-    private const int computeThreads = 512;
+    private const int SizeOfPointMass = 16;
+    private const int SizeOfMotion = 24;
+    private const int ComputeThreads = 512;
     private ComputeShader computeShader;
     private int numMasses; // should be a multiple of 256
     
@@ -22,12 +25,15 @@ public class AstronomicalSimulator
     public ComputeBuffer MassesBuffer => massesBuffer;
     public ComputeBuffer MotionsBuffer => motionsBuffer;
 
+    private byte[] massesByteBuffer = new byte[65536 * SizeOfPointMass];
+    private byte[] motionsByteBuffer = new byte[65536 * SizeOfMotion];
+
     private ComputeBuffer massesBuffer;
     private ComputeBuffer motionsBuffer;
     private ComputeBuffer readoutBuffer;
 
-    private int stepSimId;
-    private int compEnergyId;
+    private readonly int stepSimId;
+    private readonly int compEnergyId;
 
     public AstronomicalSimulator(ComputeShader computeShader, SimulationState simulationState)
     {
@@ -62,21 +68,31 @@ public class AstronomicalSimulator
     {
         computeShader.SetFloat("deltaTime", deltaTime);
         computeShader.SetFloat("halfDeltaTime", deltaTime * 0.5f);
-        computeShader.Dispatch(stepSimId, numMasses / computeThreads, 1, 1); 
+        computeShader.Dispatch(stepSimId, numMasses / ComputeThreads, 1, 1); 
     }
 
     public SimulationState GetSimulationState()
     {
+        var pointMasses = new PointMassState[numMasses];
+        GetSimulationStateNonAlloc(pointMasses);
+        return new SimulationState(pointMasses);
+    }
+
+    public void GetSimulationStateNonAlloc(PointMassState[] pointMasses)
+    {
+        if (pointMasses.Length < numMasses)
+        {
+            throw new InvalidOperationException("Buffer length too small");
+        }
+        
         var massesArr = new PointMass[numMasses];
         var motionsArr = new Motion[numMasses];
         massesBuffer.GetData(massesArr);
         motionsBuffer.GetData(motionsArr);
 
-        var pointMassStates = new PointMassState[numMasses];
-
         for (var index = 0; index < numMasses; index++)
         {
-            pointMassStates[index] = new PointMassState
+            pointMasses[index] = new PointMassState
             {
                 Mass = massesArr[index].Mass,
                 Position = massesArr[index].Position,
@@ -84,8 +100,24 @@ public class AstronomicalSimulator
                 Acceleration = motionsArr[index].Acceleration
             };
         }
+    }
 
-        return new SimulationState(pointMassStates);
+    public void GetSimulationStateNonAllocBytes(byte[] pointMassesBuffer)
+    {
+        if (pointMassesBuffer.Length < numMasses)
+        {
+            throw new InvalidOperationException("Buffer length too small");
+        }
+        
+        massesBuffer.GetData(massesByteBuffer, 0, 0, numMasses * SizeOfPointMass);
+        motionsBuffer.GetData(massesByteBuffer, 0, 0, numMasses * SizeOfMotion);
+
+        for (var index = 0; index < numMasses; index++)
+        {
+            var offset = index * 40;
+            Buffer.BlockCopy(massesByteBuffer, offset, pointMassesBuffer, offset, SizeOfPointMass);
+            Buffer.BlockCopy(motionsByteBuffer, offset + SizeOfPointMass, pointMassesBuffer, offset+SizeOfPointMass, SizeOfMotion);
+        }
     }
 
     public void SetSimulationState(SimulationState simulationState)
@@ -104,10 +136,10 @@ public class AstronomicalSimulator
             motions[i] = new Motion {Velocity = stateMass.Velocity, Acceleration = stateMass.Acceleration};
         }
 
-        massesBuffer = new ComputeBuffer(numMasses, 16);
+        massesBuffer = new ComputeBuffer(numMasses, SizeOfPointMass);
         massesBuffer.SetData(masses);
 
-        motionsBuffer = new ComputeBuffer(numMasses, 24);
+        motionsBuffer = new ComputeBuffer(numMasses, SizeOfMotion);
         motionsBuffer.SetData(motions);
 
         computeShader.SetInt("numMasses", numMasses);

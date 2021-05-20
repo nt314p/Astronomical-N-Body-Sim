@@ -36,7 +36,7 @@ public class SimulationManager : MonoBehaviour
             ContractResolver = new UnityTypeContractResolver(),
         };
         
-        var simulationState = new SimulationState(38400);
+        var simulationState = new SimulationState(2560);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
     }
@@ -92,7 +92,8 @@ public class SimulationManager : MonoBehaviour
         {
             firstPersonCamera.ProcessCamera();
         }
-
+        
+        SaveSimulationState();
         //TextLogger.Log($"{Time.time},{data.z}");
     }
 
@@ -144,21 +145,14 @@ public class SimulationManager : MonoBehaviour
 
     private void SaveSimulationState()
     {
-        var simulationState = astronomicalSimulator.GetSimulationState();
-        var json = JsonConvert.SerializeObject(simulationState.StateMasses, jsonSettings);
-        var path = "Assets/Resources/saved_state.json";
-        var writer = new StreamWriter(path, false);
-        writer.WriteLine(json);
-        writer.Close();
-        Debug.Log("Saved simulation state");
+        FileHelper.SaveSimulationState(astronomicalSimulator);
+        //Debug.Log("Saved simulation state");
     }
 
     private void LoadSimulationState()
     {
-        var path = "Assets/Resources/saved_state.json";
-        var reader = new StreamReader(path);
-        var pointMassStates = JsonConvert.DeserializeObject<PointMassState[]>(reader.ReadToEnd());
-        astronomicalSimulator.SetSimulationState(new SimulationState(pointMassStates));
+        var simulationState = FileHelper.LoadSimulationState();
+        astronomicalSimulator.SetSimulationState(simulationState);
         astronomicalRenderer.SetBuffers();
         Debug.Log("Loaded simulation state");
     }
@@ -171,25 +165,6 @@ public class SimulationManager : MonoBehaviour
         texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
         RenderTexture.active = null;
 
-        var bytes = texture.EncodeToPNG();
-        var maxScreenshotNum = -1;
-        
-        var files = Directory.GetFiles("Screenshots/", "screenshot*.png");
-
-        foreach (var file in files)
-        {
-            var numStr = file.Substring(22, file.Length - 26);
-            if (int.TryParse(numStr, out var screenshotNum))
-            {
-                if (screenshotNum > maxScreenshotNum)
-                    maxScreenshotNum = screenshotNum;
-            }
-        }
-
-        maxScreenshotNum++;
-        
-        var path = "Screenshots/screenshot" + maxScreenshotNum + ".png";
-        File.WriteAllBytes(path, bytes);
-        Debug.Log("Took screenshot!");
+        FileHelper.SaveScreenshot(texture);
     }
 }
