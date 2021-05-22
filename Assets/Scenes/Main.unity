@@ -232,7 +232,7 @@ MonoBehaviour:
   useScreenDimensions: 1
   textureDimensions: {x: 1920, y: 1080}
   timeStep: 0.05
-  freezeSimulation: 0
+  freezeSimulation: 1
   useFadeProcessing: 0
   renderMasses: 1
   lockCamera: 0

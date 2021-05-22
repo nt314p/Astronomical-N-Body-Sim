@@ -42,7 +42,7 @@ public class AstronomicalSimulator
         stepSimId = computeShader.FindKernel("StepSimulation");
         compEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
 
-        numMasses = simulationState.NumMasses();
+        numMasses = simulationState.NumMasses;
         readoutBuffer = new ComputeBuffer(numMasses, 8);
         readoutBuffer.SetData(new Vector2[numMasses]);
         computeShader.SetBuffer(compEnergyId, "readout", readoutBuffer);
@@ -78,7 +78,7 @@ public class AstronomicalSimulator
         return new SimulationState(pointMasses);
     }
 
-    public void GetSimulationStateNonAlloc(PointMassState[] pointMasses)
+    private void GetSimulationStateNonAlloc(PointMassState[] pointMasses)
     {
         if (pointMasses.Length < numMasses)
         {
@@ -110,20 +110,31 @@ public class AstronomicalSimulator
         }
         
         massesBuffer.GetData(massesByteBuffer, 0, 0, numMasses * SizeOfPointMass);
-        motionsBuffer.GetData(massesByteBuffer, 0, 0, numMasses * SizeOfMotion);
-
+        motionsBuffer.GetData(motionsByteBuffer, 0, 0, numMasses * SizeOfMotion);
+        
         for (var index = 0; index < numMasses; index++)
         {
-            var offset = index * 40;
-            Buffer.BlockCopy(massesByteBuffer, offset, pointMassesBuffer, offset, SizeOfPointMass);
-            Buffer.BlockCopy(motionsByteBuffer, offset + SizeOfPointMass, pointMassesBuffer, offset+SizeOfPointMass, SizeOfMotion);
+            var offset = index * (SizeOfPointMass + SizeOfMotion);
+            var massOffset = index * SizeOfPointMass;
+            var motionOffset = index * SizeOfMotion;
+            for (var massIndex = 0; massIndex < SizeOfPointMass; massIndex++)
+            {
+                pointMassesBuffer[offset + massIndex] = massesByteBuffer[massOffset + massIndex];
+            }
+
+            offset += SizeOfPointMass;
+            
+            for (var motionIndex = 0; motionIndex < SizeOfMotion; motionIndex++)
+            {
+                pointMassesBuffer[offset + motionIndex] = motionsByteBuffer[motionOffset + motionIndex];
+            }
         }
     }
 
     public void SetSimulationState(SimulationState simulationState)
     {
         ReleaseBuffers();
-        numMasses = simulationState.NumMasses();
+        numMasses = simulationState.NumMasses;
 
         var masses = new PointMass[numMasses];
         var motions = new Motion[numMasses];
@@ -149,7 +160,44 @@ public class AstronomicalSimulator
         computeShader.SetBuffer(compEnergyId, "masses", massesBuffer);
         computeShader.SetBuffer(compEnergyId, "motions", motionsBuffer);
     }
-    
+
+    public void SetSimulationStateNonAllocBytes(byte[] pointMassesBuffer, int newNumMasses)
+    {
+        ReleaseBuffers();
+        numMasses = newNumMasses;
+        
+        for (var index = 0; index < numMasses; index++)
+        {
+            var offset = index * (SizeOfPointMass + SizeOfMotion);
+            var massOffset = index * SizeOfPointMass;
+            var motionOffset = index * SizeOfMotion;
+            for (var massIndex = 0; massIndex < SizeOfPointMass; massIndex++)
+            {
+                massesByteBuffer[massOffset + massIndex] = pointMassesBuffer[offset + massIndex];
+            }
+
+            offset += SizeOfPointMass;
+            
+            for (var motionIndex = 0; motionIndex < SizeOfMotion; motionIndex++)
+            {
+                motionsByteBuffer[motionOffset + motionIndex] = pointMassesBuffer[offset + motionIndex];
+            }
+        }
+        
+        massesBuffer = new ComputeBuffer(numMasses, SizeOfPointMass);
+        massesBuffer.SetData(massesByteBuffer, 0, 0, numMasses * SizeOfPointMass);
+
+        motionsBuffer = new ComputeBuffer(numMasses, SizeOfMotion);
+        motionsBuffer.SetData(motionsByteBuffer, 0, 0, numMasses * SizeOfMotion);
+
+        computeShader.SetInt("numMasses", numMasses);
+        computeShader.SetBuffer(stepSimId, "masses", massesBuffer);
+        computeShader.SetBuffer(stepSimId, "motions", motionsBuffer);
+
+        computeShader.SetBuffer(compEnergyId, "masses", massesBuffer);
+        computeShader.SetBuffer(compEnergyId, "motions", motionsBuffer);
+    }
+
     public Vector3 GetTotalEnergy()
     {
         if (readoutBuffer == null)

@@ -36,7 +36,7 @@ public class SimulationManager : MonoBehaviour
             ContractResolver = new UnityTypeContractResolver(),
         };
         
-        var simulationState = new SimulationState(2560);
+        var simulationState = new SimulationState(25600);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
     }
@@ -92,8 +92,47 @@ public class SimulationManager : MonoBehaviour
         {
             firstPersonCamera.ProcessCamera();
         }
+
+        if (Input.GetKeyDown(KeyCode.F9))
+        {
+            if (!FileHelper.IsRecording)
+            {
+                FileHelper.StartStateRecording(astronomicalSimulator);
+                Debug.Log("Started recording");
+            }
+            else
+            {
+                FileHelper.EndStateRecording();
+                Debug.Log("Ended recording");
+            }
+        }
+
+        if (Input.GetKeyDown(KeyCode.F10))
+        {
+            if (!FileHelper.IsStreaming)
+            {
+                FileHelper.StartStateStreaming(astronomicalSimulator);
+                Debug.Log("Started streaming");
+            }
+            else
+            {
+                FileHelper.EndStateStreaming();
+                Debug.Log("Ended streaming");
+            }
+        }
+
+        if (FileHelper.IsRecording && !freezeSimulation)
+        {
+            FileHelper.UpdateStateRecording();
+        }
+
+        if (FileHelper.IsStreaming && !freezeSimulation)
+        {
+            FileHelper.UpdateStateStreaming(1);
+        } 
         
-        SaveSimulationState();
+        // LoadSimulationState();
+        // SaveSimulationState();
         //TextLogger.Log($"{Time.time},{data.z}");
     }
 
@@ -124,7 +163,7 @@ public class SimulationManager : MonoBehaviour
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        if (!freezeSimulation)
+        if (!freezeSimulation && !FileHelper.IsStreaming)
         {
             astronomicalSimulator.UpdateMasses(Time.fixedDeltaTime * timeStep);
         }
@@ -151,8 +190,7 @@ public class SimulationManager : MonoBehaviour
 
     private void LoadSimulationState()
     {
-        var simulationState = FileHelper.LoadSimulationState();
-        astronomicalSimulator.SetSimulationState(simulationState);
+        FileHelper.LoadSimulationState(astronomicalSimulator);
         astronomicalRenderer.SetBuffers();
         Debug.Log("Loaded simulation state");
     }
