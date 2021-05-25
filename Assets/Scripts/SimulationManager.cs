@@ -1,9 +1,4 @@
-using System.IO;
 using UnityEngine;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.UnityConverters;
-using Newtonsoft.Json.UnityConverters.Math;
 
 public class SimulationManager : MonoBehaviour
 {
@@ -20,7 +15,6 @@ public class SimulationManager : MonoBehaviour
     
     private AstronomicalSimulator astronomicalSimulator;
     private AstronomicalRenderer astronomicalRenderer;
-    private JsonSerializerSettings jsonSettings;
 
     private float previousEnergy = 0;
     private float[] energies = new float[20];
@@ -28,15 +22,9 @@ public class SimulationManager : MonoBehaviour
 
     private void OnEnable()
     {
-        jsonSettings = new JsonSerializerSettings {
-            Converters = new JsonConverter[] {
-                new Vector3Converter(),
-                new StringEnumConverter(),
-            },
-            ContractResolver = new UnityTypeContractResolver(),
-        };
-        
-        var simulationState = new SimulationState(25600);
+        Application.targetFrameRate = 60;
+
+        var simulationState = new SimulationState(5120);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
     }
@@ -66,11 +54,13 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.I))
         {
             LoadSimulationState();
+            Debug.Log("Loaded simulation state");
         }
 
         if (Input.GetKeyDown(KeyCode.O))
         {
             SaveSimulationState();
+            Debug.Log("Saved simulation state");
         }
         
         if (Input.GetKeyDown(KeyCode.F1))
@@ -109,15 +99,16 @@ public class SimulationManager : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.F10))
         {
-            if (!FileHelper.IsStreaming)
+            if (!FileHelper.IsReplaying)
             {
-                FileHelper.StartStateStreaming(astronomicalSimulator);
-                Debug.Log("Started streaming");
+                FileHelper.StartStateReplay(astronomicalSimulator);
+                Debug.Log("Started replay");
+                astronomicalRenderer.SetBuffers();
             }
             else
             {
-                FileHelper.EndStateStreaming();
-                Debug.Log("Ended streaming");
+                FileHelper.EndStateReplay();
+                Debug.Log("Ended replay");
             }
         }
 
@@ -126,10 +117,7 @@ public class SimulationManager : MonoBehaviour
             FileHelper.UpdateStateRecording();
         }
 
-        if (FileHelper.IsStreaming && !freezeSimulation)
-        {
-            FileHelper.UpdateStateStreaming(1);
-        } 
+
         
         // LoadSimulationState();
         // SaveSimulationState();
@@ -163,10 +151,16 @@ public class SimulationManager : MonoBehaviour
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        if (!freezeSimulation && !FileHelper.IsStreaming)
+        if (!freezeSimulation && !FileHelper.IsReplaying)
         {
             astronomicalSimulator.UpdateMasses(Time.fixedDeltaTime * timeStep);
         }
+        
+        if (FileHelper.IsReplaying && !freezeSimulation)
+        {
+            FileHelper.UpdateStateReplay(1);
+            astronomicalRenderer.SetBuffers();
+        } 
 
         if (renderMasses)
         {
@@ -185,14 +179,12 @@ public class SimulationManager : MonoBehaviour
     private void SaveSimulationState()
     {
         FileHelper.SaveSimulationState(astronomicalSimulator);
-        //Debug.Log("Saved simulation state");
     }
 
     private void LoadSimulationState()
     {
         FileHelper.LoadSimulationState(astronomicalSimulator);
         astronomicalRenderer.SetBuffers();
-        Debug.Log("Loaded simulation state");
     }
 
     private void SaveScreenshot()

@@ -1,17 +1,19 @@
 ﻿using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using UnityEngine;
 
 public static class FileHelper
 {
     private const int SizeOfPointMassState = 40;
+    private const int SizeOfStreamPointMassState = 16; // Vector3 position, float speed
     private static readonly byte[] PointMassesBuffer = new byte[65536 * SizeOfPointMassState];
+    private static readonly byte[] StreamingBuffer = new byte[65536 * SizeOfStreamPointMassState];
+    private static readonly byte[] StreamingMasses = new byte[65536 * sizeof(float)];
     public static bool IsRecording { get; private set; } = false;
-    public static bool IsStreaming { get; private set; } = false;
+    public static bool IsReplaying { get; private set; } = false;
     private static BinaryWriter recordingWriter;
-    private static BinaryReader streamingReader;
-    private static int streamingNumMasses;
+    private static BinaryReader replayReader;
+    private static int replayingNumMasses;
     private static AstronomicalSimulator currentAstronomicalSimulator;
     
     public static bool SaveScreenshot(Texture2D texture)
@@ -42,48 +44,85 @@ public static class FileHelper
         return true;
     }
 
-    public static void StartStateStreaming(AstronomicalSimulator astronomicalSimulator)
+    public static void StartStateReplay(AstronomicalSimulator astronomicalSimulator)
     {
-        if (IsStreaming)
+        if (IsReplaying)
         {
-            throw new InvalidOperationException("Streaming already started");
+            throw new InvalidOperationException("Replay already started");
         }
         
         if (IsRecording)
         {
-            throw new InvalidOperationException("Cannot start streaming when recording");
+            throw new InvalidOperationException("Cannot start replay when recording");
         }
 
         var path = "Saves/saved_stream.simstream";
-        streamingReader = new BinaryReader(File.Open(path, FileMode.Open));
-        streamingNumMasses = streamingReader.ReadInt32();
+        replayReader = new BinaryReader(File.Open(path, FileMode.Open));
+        replayingNumMasses = replayReader.ReadInt32();
+
+        replayReader.Read(StreamingMasses, 0, replayingNumMasses * sizeof(float));
+
         currentAstronomicalSimulator = astronomicalSimulator;
-        Debug.Log("Num mass stream size is: " + streamingNumMasses);
-        IsStreaming = true;
+        IsReplaying = true;
+        UpdateStateReplay(1);
     }
 
-    public static void UpdateStateStreaming(int step)
+    public static void UpdateStateReplay(int step)
     {
         if (step == 0) return;
-        if (!IsStreaming)
+        if (!IsReplaying)
         {
-            throw new InvalidOperationException("Streaming has not been started");
+            throw new InvalidOperationException("Replay has not been started");
         }
 
-        var stateSize = streamingNumMasses * SizeOfPointMassState;
-        streamingReader.Read(PointMassesBuffer, 0, stateSize);
+        var stateSize = replayingNumMasses * SizeOfStreamPointMassState;
+        replayReader.Read(StreamingBuffer, 0, stateSize);
+            
+        // StreamingBuffer: 12 bytes position, 4 bytes speed
+        // PointMassesBuffer: 4 bytes mass, 12 bytes position, 12 bytes velocity, 12 bytes acceleration
+        
+        // SteamingMasses.mass, StreamingBuffer.position, [StreamingBuffer.speed, 0, 0], [0, 0, 0]
+        
+        for (var index = 0; index < replayingNumMasses; index++)
+        {
+            var offset = index * SizeOfPointMassState;
+            var massOffset = index * sizeof(float);
+            var positionVelocityOffset = index * SizeOfStreamPointMassState;
+            for (var massIndex = 0; massIndex < sizeof(float); massIndex++) // Mass
+            {
+                PointMassesBuffer[offset + massIndex] = StreamingMasses[massOffset + massIndex];
+            }
+
+            offset += sizeof(float);
+            
+            for (var positionVelocityIndex = 0; // Position and velocity.x
+                positionVelocityIndex < SizeOfStreamPointMassState;
+                positionVelocityIndex++)
+            {
+                PointMassesBuffer[offset + positionVelocityIndex] =
+                    StreamingBuffer[positionVelocityOffset + positionVelocityIndex];
+            }
+
+            offset += SizeOfStreamPointMassState;
+            var numZeros = SizeOfPointMassState - SizeOfStreamPointMassState - sizeof(float);
+
+            for (var zeroIndex = 0; zeroIndex < numZeros; zeroIndex++) // Velocity.yz, Acceleration
+            {
+                PointMassesBuffer[offset + zeroIndex] = 0;
+            }
+        }
         //streamingReader.BaseStream.Position += (step - 1) * stateSize;
-        currentAstronomicalSimulator.SetSimulationStateNonAllocBytes(PointMassesBuffer, streamingNumMasses);
+        currentAstronomicalSimulator.SetSimulationStateNonAllocBytes(PointMassesBuffer, replayingNumMasses);
     }
 
-    public static void EndStateStreaming()
+    public static void EndStateReplay()
     {
-        if (!IsStreaming)
+        if (!IsReplaying)
         {
-            throw new InvalidOperationException("Streaming has not been started");
+            throw new InvalidOperationException("Replay has not been started");
         }
-        streamingReader.Close();
-        IsStreaming = false;
+        replayReader.Close();
+        IsReplaying = false;
     }
 
     public static void StartStateRecording(AstronomicalSimulator astronomicalSimulator)
@@ -93,16 +132,31 @@ public static class FileHelper
             throw new InvalidOperationException("Recording already started");
         }
 
-        if (IsStreaming)
+        if (IsReplaying)
         {
-            throw new InvalidOperationException("Cannot start recording when streaming");
+            throw new InvalidOperationException("Cannot start recording when replaying");
         }
 
         var path = "Saves/saved_stream.simstream";
         recordingWriter = new BinaryWriter(File.Open(path, FileMode.Create));
         currentAstronomicalSimulator = astronomicalSimulator;
         recordingWriter.Write(currentAstronomicalSimulator.NumMasses);
+        
         // recordingWriter.Write(currentAstronomicalSimulator.); // write timestep
+
+        astronomicalSimulator.GetSimulationStateNonAllocBytes(PointMassesBuffer);
+        for (var index = 0; index < currentAstronomicalSimulator.NumMasses; index++)
+        {
+            var offset = index * SizeOfPointMassState;
+            var streamingOffset = index * sizeof(float);
+            for (var massIndex = 0; massIndex < sizeof(float); massIndex++)
+            {
+                StreamingMasses[streamingOffset + massIndex] = PointMassesBuffer[offset + massIndex];
+            }
+        }
+
+        recordingWriter.Write(StreamingMasses, 0, currentAstronomicalSimulator.NumMasses * sizeof(float));
+        
         IsRecording = true;
     }
 
@@ -114,7 +168,32 @@ public static class FileHelper
         }
         
         currentAstronomicalSimulator.GetSimulationStateNonAllocBytes(PointMassesBuffer);
-        recordingWriter.Write(PointMassesBuffer, 0, currentAstronomicalSimulator.NumMasses * SizeOfPointMassState);
+
+        for (var index = 0; index < currentAstronomicalSimulator.NumMasses; index++)
+        {
+            var offset = index * SizeOfPointMassState + sizeof(float); // Offset a single float (mass value) from start
+            var streamOffset = index * SizeOfStreamPointMassState;
+            for (var positionIndex = 0; positionIndex < 3 * sizeof(float); positionIndex++) // Position
+            {
+                StreamingBuffer[streamOffset + positionIndex] = PointMassesBuffer[offset + positionIndex];
+            }
+            
+            var squareMagnitudeVelocity = 0.0f; // flatten velocity to single float
+            for (var velocityComponent = 0; velocityComponent < 3; velocityComponent++)
+            {
+                var component = BitConverter.ToSingle(PointMassesBuffer, offset + velocityComponent * sizeof(float));
+                squareMagnitudeVelocity += component * component;
+            }
+
+            streamOffset += 3 * sizeof(float);
+            
+            var velocityBytes = BitConverter.GetBytes(Mathf.Sqrt(squareMagnitudeVelocity));
+            for (var velocityIndex = 0; velocityIndex < sizeof(float); velocityIndex++) // Velocity
+            {
+                StreamingBuffer[streamOffset + velocityIndex] = velocityBytes[velocityIndex];
+            }
+        }
+        recordingWriter.Write(StreamingBuffer, 0, currentAstronomicalSimulator.NumMasses * SizeOfStreamPointMassState);
     }
 
     public static void EndStateRecording()
