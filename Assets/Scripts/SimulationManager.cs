@@ -2,6 +2,7 @@ using UnityEngine;
 
 public class SimulationManager : MonoBehaviour
 {
+    [SerializeField] private DisplayManager displayManager;
     [SerializeField] private ComputeShader computeShader;
     [SerializeField] private Camera cam;
     [SerializeField] private FirstPersonCam firstPersonCamera;
@@ -24,7 +25,7 @@ public class SimulationManager : MonoBehaviour
     {
         Application.targetFrameRate = 60;
 
-        var simulationState = new SimulationState(5120);
+        var simulationState = new SimulationState(10240);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
     }
@@ -49,18 +50,29 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.L))
         {
             lockCamera = !lockCamera;
+            Cursor.lockState = lockCamera ? CursorLockMode.None : CursorLockMode.Locked;
         }
 
-        if (Input.GetKeyDown(KeyCode.I))
+        if (Input.GetKeyDown(KeyCode.F7))
+        {
+            SaveSimulationState();
+            Debug.Log("Saved simulation state");
+        }
+
+        if (Input.GetKeyDown(KeyCode.F8))
         {
             LoadSimulationState();
             Debug.Log("Loaded simulation state");
         }
 
-        if (Input.GetKeyDown(KeyCode.O))
+        if (Input.GetKeyDown(KeyCode.H))
         {
-            SaveSimulationState();
-            Debug.Log("Saved simulation state");
+            displayManager.ToggleHelp();
+        }
+
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            displayManager.ToggleSettingsMenu();
         }
         
         if (Input.GetKeyDown(KeyCode.F1))
