@@ -202,19 +202,22 @@ public class AstronomicalSimulator
     {
         if (readoutBuffer == null)
         {
-            Debug.Log("NULL");
+            throw new NullReferenceException("Readout buffer is null");
         }
-        computeShader.Dispatch(compEnergyId, numMasses / 128, 1, 1);
-        var readoutArr = new Vector2[numMasses];
+        computeShader.Dispatch(compEnergyId, numMasses / 256, 1, 1);
+        var readoutArr = new float[numMasses * 2];
         readoutBuffer.GetData(readoutArr);
 
-        var total = Vector2.zero;
+        var kineticEnergy = 0f;
+        var potentialEnergy = 0f;
 
         for (var i = 0; i < numMasses; i++)
         {
-            total += readoutArr[i];
+            var offset = i * 2;
+            kineticEnergy += readoutArr[offset];
+            potentialEnergy += readoutArr[offset + 1];
         }
 
-        return new Vector3(total.x, total.y, total.x + total.y); // Kinetic, Potential, Total
+        return new Vector3(kineticEnergy, potentialEnergy, kineticEnergy + potentialEnergy); // Kinetic, Potential, Total
     }
 }

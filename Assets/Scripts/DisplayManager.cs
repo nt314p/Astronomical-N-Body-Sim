@@ -7,25 +7,27 @@ public class DisplayManager : MonoBehaviour
     [SerializeField] private GameObject helpScreen;
 
     [SerializeField] private GameObject settingsMenu;
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+    [SerializeField] private GameObject mainCanvas;
 
     public void ToggleHelp()
     {
+        if (!helpScreen.activeInHierarchy)
+        {
+            mainCanvas.SetActive(true); // ensure that UI is showing for help menu
+            helpScreen.SetActive(true);
+            return;
+        }
         helpScreen.SetActive(!helpScreen.activeInHierarchy);
     }
 
     public void ToggleSettingsMenu()
     {
         settingsMenu.SetActive(!settingsMenu.activeInHierarchy);
+    }
+
+    public void ToggleUI()
+    {
+        mainCanvas.SetActive(!mainCanvas.activeInHierarchy);
     }
 }

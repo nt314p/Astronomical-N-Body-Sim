@@ -80,6 +80,11 @@ public class SimulationManager : MonoBehaviour
             SaveScreenshot();
         }
 
+        if (Input.GetKeyDown(KeyCode.F2))
+        {
+            displayManager.ToggleUI();
+        }
+
         if (Input.GetKeyDown(KeyCode.Period))
         {
             timeStep *= 2;
@@ -129,8 +134,10 @@ public class SimulationManager : MonoBehaviour
             FileHelper.UpdateStateRecording();
         }
 
+        astronomicalSimulator.GetTotalEnergy();
 
-        
+        //LogEnergies();
+
         // LoadSimulationState();
         // SaveSimulationState();
         //TextLogger.Log($"{Time.time},{data.z}");
@@ -139,7 +146,7 @@ public class SimulationManager : MonoBehaviour
     private void LogEnergies()
     {
         var data = astronomicalSimulator.GetTotalEnergy();
-        Debug.Log("Per: " + (data.z - previousEnergy) * 100/ Time.fixedDeltaTime / data.z);
+        Debug.Log("Per: " + (data.z - previousEnergy) * 100 / timeStep / data.z);
         Debug.Log("Tot: " + data.z);
 
         float averageEnergy = 0;

@@ -47,7 +47,7 @@ public class SimulationState
         {
             Vector3 pos = Random.insideUnitSphere * 100;
             // pos.z = pos.y;
-            pos.y = Random.Range(-10.0f, 10.0f);
+            pos.y = Random.Range(-5.0f, 5.0f);
 
             var vel = Vector3.Cross(pos, Vector3.up).normalized * Mathf.Sqrt(pos.magnitude) * 20.15500f; // circular motion
             //pos.x += 1000;

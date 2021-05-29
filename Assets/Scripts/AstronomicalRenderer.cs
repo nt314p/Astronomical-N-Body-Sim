@@ -61,7 +61,7 @@ public class AstronomicalRenderer
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix); 
         computeShader.SetVector("cameraPosition", camera.transform.position);
 
-        computeShader.Dispatch(renderMassesId, numMasses / 128, 1, 1);
+        computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
 
         return renderTexture;
     }

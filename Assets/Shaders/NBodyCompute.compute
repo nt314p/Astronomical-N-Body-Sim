@@ -85,7 +85,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	motions[id.x] = m;
 }
 
-[numthreads(128, 1, 1)]
+[numthreads(256, 1, 1)]
 void RenderMasses(uint3 id : SV_DispatchThreadID)
 {
 	float3 pos = masses[id.x].position;
@@ -132,7 +132,7 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	renderTexture[(float2) screenPos + float2(0, -1)] += val * 0.4;
 }
 
-[numthreads(128, 1, 1)]
+[numthreads(256, 1, 1)]
 void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 {
 	PointMass p = masses[id.x];
@@ -140,18 +140,19 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 	float vel = motions[id.x].velocity;
 	float Ekinetic = 0.5f * vel * vel * p.mass;
 	float Epotential = 0;
-	
+
+	[unroll(256)]
 	for (uint i = 0; i < numMasses; ++i)
 	{
 		PointMass po = masses[i];
 		float dist = length(p.position - po.position);
 		if (i != id.x)
 		{
-			Epotential -= Gm * po.mass / dist;
+			Epotential -= po.mass / dist;
 		}
 	}
 	
-	Epotential *= 0.5; // correct duplicate pairwise interaction counts
+	Epotential *= Gm * 0.5; // correct duplicate pairwise interaction counts
 
 	readout[id.x] = float2(Ekinetic, Epotential);
 }
