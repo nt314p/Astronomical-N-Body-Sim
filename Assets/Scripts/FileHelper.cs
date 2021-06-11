@@ -15,6 +15,18 @@ public static class FileHelper
     private static BinaryReader replayReader;
     private static int replayingNumMasses;
     private static AstronomicalSimulator currentAstronomicalSimulator;
+
+    public static void InitializeDirectories()
+    {
+        if (!Directory.Exists("Screenshots"))
+        {
+            Directory.CreateDirectory("Screenshots");
+        }
+        if (!Directory.Exists("Saves"))
+        {
+            Directory.CreateDirectory("Saves");
+        }
+    }
     
     public static bool SaveScreenshot(Texture2D texture)
     {
@@ -44,7 +56,7 @@ public static class FileHelper
         return true;
     }
 
-    public static void StartStateReplay(AstronomicalSimulator astronomicalSimulator)
+    public static void StartStateReplay(string fileName, AstronomicalSimulator astronomicalSimulator)
     {
         if (IsReplaying)
         {
@@ -56,8 +68,19 @@ public static class FileHelper
             throw new InvalidOperationException("Cannot start replay when recording");
         }
 
-        var path = "Saves/saved_stream.simstream";
-        replayReader = new BinaryReader(File.Open(path, FileMode.Open));
+        var path = $"Saves/{fileName}.simstream";
+        FileStream replayFile;
+        try
+        {
+            replayFile = File.Open(path, FileMode.Open);
+        }
+        catch (Exception)
+        {
+            Debug.Log("Unable to open stream file");
+            return;
+        }
+        
+        replayReader = new BinaryReader(replayFile);
         replayingNumMasses = replayReader.ReadInt32();
 
         replayReader.Read(StreamingMasses, 0, replayingNumMasses * sizeof(float));
@@ -125,7 +148,7 @@ public static class FileHelper
         IsReplaying = false;
     }
 
-    public static void StartStateRecording(AstronomicalSimulator astronomicalSimulator)
+    public static void StartStateRecording(string fileName, AstronomicalSimulator astronomicalSimulator)
     {
         if (IsRecording)
         {
@@ -137,7 +160,7 @@ public static class FileHelper
             throw new InvalidOperationException("Cannot start recording when replaying");
         }
 
-        var path = "Saves/saved_stream.simstream";
+        var path = $"Saves/{fileName}.simstream";
         recordingWriter = new BinaryWriter(File.Open(path, FileMode.Create));
         currentAstronomicalSimulator = astronomicalSimulator;
         recordingWriter.Write(currentAstronomicalSimulator.NumMasses);
@@ -206,10 +229,26 @@ public static class FileHelper
         IsRecording = false;
     }
 
-    public static void LoadSimulationState(AstronomicalSimulator astronomicalSimulator)
+    public static void CloseFiles()
     {
-        var path = "Saves/saved_state.simstate";
-        var stateFile = File.Open(path, FileMode.Open);
+        recordingWriter?.Close();
+        replayReader?.Close();
+    }
+
+    public static void LoadSimulationState(string fileName, AstronomicalSimulator astronomicalSimulator)
+    {
+        var path = $"Saves/{fileName}.simstate";
+        FileStream stateFile;
+        try
+        {
+            stateFile = File.Open(path, FileMode.Open);
+        }
+        catch (Exception)
+        {
+            Debug.Log("Unable to open state file");
+            return;
+        }
+
         using var binaryReader = new BinaryReader(stateFile);
         var numMasses = (int) stateFile.Length / SizeOfPointMassState;
         binaryReader.Read(PointMassesBuffer, 0, (int) stateFile.Length);
@@ -217,14 +256,10 @@ public static class FileHelper
         astronomicalSimulator.SetSimulationStateNonAllocBytes(PointMassesBuffer, numMasses);
     }
 
-    public static void SaveSimulationState(AstronomicalSimulator astronomicalSimulator)
+    public static void SaveSimulationState(string fileName, AstronomicalSimulator astronomicalSimulator)
     {
-        var path = "Saves/saved_state.simstate";
-        if (!Directory.Exists("SavedStates"))
-        {
-            Directory.CreateDirectory("Saves");
-        }
-
+        var path = $"Saves/{fileName}.simstate";
+        
         var numMasses = astronomicalSimulator.NumMasses;
         astronomicalSimulator.GetSimulationStateNonAllocBytes(PointMassesBuffer);
         

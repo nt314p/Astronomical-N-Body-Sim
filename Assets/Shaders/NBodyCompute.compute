@@ -24,7 +24,7 @@ struct Motion
 RWStructuredBuffer<PointMass> masses : register(u0);
 RWStructuredBuffer<Motion> motions : register(u1); 
 RWStructuredBuffer<float2> readout : register(u2);
-RWTexture2D<float4> renderTexture :register(u3);
+RWTexture2D<float4> renderTexture;// :register(u3);
 
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
 
@@ -58,7 +58,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	{
 		uint index = groupIndex + i;
 		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
-		[unroll(threadsX)]
+		//[unroll(threadsX)]
 		for (uint i2 = 0; i2 < threadsX; ++i2)
 		{
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
@@ -85,6 +85,9 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	motions[id.x] = m;
 }
 
+float minColorSpeed;
+float maxColorSpeed;
+
 [numthreads(256, 1, 1)]
 void RenderMasses(uint3 id : SV_DispatchThreadID)
 {
@@ -94,42 +97,21 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	float w = screenPos.w;
 	screenPos /= w;
 	
-	float j = (length(vel) - 10) * 0.0045;
+	float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
 
 	//float camDist = min(distance(cameraPosition, pos), 200);
 	float3 color = hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
 	float4 val =  w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
-	renderTexture[(float2) screenPos] += val;
-
-	/*
-	[unroll((particleRadius + 1) * (particleRadius + 1))]
-	for (int i = 0; i < (particleRadius + 1) * (particleRadius + 1); ++i)
-	{
-		int cx = i / (particleRadius * 2 + 1) - particleRadius;
-		int cy = i % (particleRadius * 2 + 1) - particleRadius;
-		float cdist = cx * cx + cy * cy;
-		float intensity = cdist != 0 ? 0.3 / cdist : 1;
-		//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
-		renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
-		renderTexture[(float2) v + float2(cx, cy)] *= 0.99;	
-	}
-
-	/*
-	for (int cx = -particleRadius; cx <= particleRadius; ++cx)
-	{
-		for (int cy = -particleRadius; cy <= particleRadius; ++cy)
-		{
-			float cdist = cx * cx + cy * cy;
-			float intensity = cdist != 0 ? 0.2 / cdist : 1;
-			//float valPresent = length(renderTexture[(float2) v + float2(cx, cy)]);
-            renderTexture[(float2) v + float2(cx, cy)] += val * intensity;
-			renderTexture[(float2) v + float2(cx, cy)] *= 0.99;		
-		}
-	}*/
-	renderTexture[(float2) screenPos + float2(1, 0)] += val * 0.4;
-	renderTexture[(float2) screenPos + float2(-1, 0)] += val * 0.4;
-	renderTexture[(float2) screenPos + float2(0, 1)] += val * 0.4;
-	renderTexture[(float2) screenPos + float2(0, -1)] += val * 0.4;
+	renderTexture[(uint2) screenPos] += val;
+	GroupMemoryBarrierWithGroupSync();
+	renderTexture[(uint2) screenPos + uint2(1, 0)] += val * 0.4;
+	GroupMemoryBarrierWithGroupSync();
+	renderTexture[(uint2) screenPos + uint2(-1, 0)] += val * 0.4;
+	GroupMemoryBarrierWithGroupSync();
+	renderTexture[(uint2) screenPos + uint2(0, 1)] += val * 0.4;
+	GroupMemoryBarrierWithGroupSync();
+	renderTexture[(uint2) screenPos + uint2(0, -1)] += val * 0.4;
+	GroupMemoryBarrierWithGroupSync();
 }
 
 [numthreads(256, 1, 1)]
@@ -141,7 +123,6 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 	float Ekinetic = 0.5f * vel * vel * p.mass;
 	float Epotential = 0;
 
-	[unroll(256)]
 	for (uint i = 0; i < numMasses; ++i)
 	{
 		PointMass po = masses[i];

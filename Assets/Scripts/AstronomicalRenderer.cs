@@ -2,15 +2,17 @@
 
 public class AstronomicalRenderer
 {
-    private Camera camera;
-    private ComputeShader computeShader;
+    private readonly Camera camera;
+    private readonly ComputeShader computeShader;
     private RenderTexture renderTexture;
 
-    private AstronomicalSimulator astronomicalSimulator;
+    private readonly AstronomicalSimulator astronomicalSimulator;
 
-    private int numMasses;
-    private int processTextureId;
-    private int renderMassesId;
+    private readonly int numMasses;
+    private readonly int processTextureId;
+    private readonly int renderMassesId;
+    private readonly int minColorSpeedId;
+    private readonly int maxColorSpeedId;
 
     public AstronomicalRenderer(AstronomicalSimulator astronomicalSimulator, ComputeShader computeShader, Camera camera)
     {
@@ -20,6 +22,9 @@ public class AstronomicalRenderer
 
         processTextureId = computeShader.FindKernel("ProcessTexture");
         renderMassesId = computeShader.FindKernel("RenderMasses");
+        minColorSpeedId = Shader.PropertyToID("minColorSpeed");
+        maxColorSpeedId = Shader.PropertyToID("maxColorSpeed");
+
 
         numMasses = astronomicalSimulator.NumMasses;
         
@@ -33,6 +38,16 @@ public class AstronomicalRenderer
         computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
     }
 
+    public void SetMinColorSpeed(float minSpeed)
+    {
+        computeShader.SetFloat(minColorSpeedId, minSpeed);
+    }
+    
+    public void SetMaxColorSpeed(float maxSpeed)
+    {
+        computeShader.SetFloat(minColorSpeedId, maxSpeed);
+    }
+
     public RenderTexture RenderMasses(Vector2Int dimensions, bool useFadeProcessing = false)
     {
         if (renderTexture == null || !useFadeProcessing)
@@ -40,7 +55,7 @@ public class AstronomicalRenderer
             if (renderTexture != null)
                 renderTexture.Release();
             
-            renderTexture = new RenderTexture(dimensions.x, dimensions.y, 24);
+            renderTexture = new RenderTexture(dimensions.x, dimensions.y, 0);
 
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
@@ -62,7 +77,7 @@ public class AstronomicalRenderer
         computeShader.SetVector("cameraPosition", camera.transform.position);
 
         computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
-
+        
         return renderTexture;
     }
     

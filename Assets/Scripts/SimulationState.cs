@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
+using Random = UnityEngine.Random;
 
 public struct PointMassState
 {
@@ -6,6 +8,14 @@ public struct PointMassState
     public Vector3 Position;
     public Vector3 Velocity;
     public Vector3 Acceleration;
+}
+
+public enum RadiusRelation
+{
+    RadiusSquareRoot=0, 
+    Radius=1,
+    RadiusSquared=2,
+    Constant=3
 }
 
 public class SimulationState
@@ -42,29 +52,88 @@ public class SimulationState
     public SimulationState(int numMasses)
     {
         masses = new PointMassState[numMasses];
-        
-        for (var i = 0; i < numMasses; i++) // create a little galaxy
+
+        for (var index = 0; index < numMasses; index++) // create a little galaxy
         {
             Vector3 pos = Random.insideUnitSphere * 100;
             // pos.z = pos.y;
             pos.y = Random.Range(-5.0f, 5.0f);
 
-            var vel = Vector3.Cross(pos, Vector3.up).normalized * Mathf.Sqrt(pos.magnitude) * 20.15500f; // circular motion
+            var vel = Vector3.Cross(pos, Vector3.up).normalized * Mathf.Sqrt(pos.magnitude) *
+                      20.15500f; // circular motion
             //pos.x += 1000;
 
-            masses[i] = new PointMassState
+            masses[index] = new PointMassState
             {
                 // Mass = 101,
                 // Position = new Vector3(201, 211, 221),
                 // Velocity = new Vector3(301, 311, 321),
                 // Acceleration = new Vector3(401, 411, 421),
-                Mass = 4000000000000,
+                Mass = 40000000000,
                 Position = pos,
                 Velocity = vel,
                 Acceleration = Vector3.zero
             };
         }
     }
+
+    public SimulationState(int numMasses, float mass, float initialVelocity, float galaxyRadius, RadiusRelation massDistribution, RadiusRelation velocityRelation)
+    {
+        masses = new PointMassState[numMasses];
+
+        for (var index = 0; index < numMasses; index++)
+        {
+            var radius = Random.Range(0.0f, 1.0f);
+            switch (massDistribution)
+            {
+                case RadiusRelation.RadiusSquareRoot: // *?
+                    radius = Mathf.Sqrt(radius);
+                    break;
+                case RadiusRelation.Radius: // * not mathematically correct, but an okay approximation
+                    radius = Mathf.Pow(radius, 0.3333f);
+                    break;
+            }
+
+            var speed = radius;
+            switch (velocityRelation)
+            {
+                case RadiusRelation.RadiusSquareRoot:
+                    speed = Mathf.Sqrt(speed);
+                    break;
+                case RadiusRelation.Radius:
+                    break;
+                case RadiusRelation.RadiusSquared:
+                    speed *= speed * speed;
+                    break;
+                case RadiusRelation.Constant:
+                    speed = 1;
+                    break;
+            }
+            
+            
+            radius *= galaxyRadius;
+
+            var pos = (Vector3) Random.insideUnitCircle.normalized;
+            pos.z = pos.y;
+            pos *= radius;
+            
+            var heightVariation = galaxyRadius * 0.05f;
+            pos.y = Random.Range(-heightVariation, heightVariation);
+            
+            speed *= initialVelocity;
+
+            var vel = Vector3.Cross(pos, Vector3.up).normalized * speed;
+
+            masses[index] = new PointMassState
+            {
+                Mass = mass,
+                Position = pos,
+                Velocity = vel,
+                Acceleration = Vector3.zero
+            };
+        }
+    }
+    
 
     public PointMassState[] StateMasses => masses;
 }

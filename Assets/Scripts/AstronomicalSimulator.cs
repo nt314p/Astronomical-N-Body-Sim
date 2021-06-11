@@ -34,6 +34,7 @@ public class AstronomicalSimulator
 
     private readonly int stepSimId;
     private readonly int compEnergyId;
+    public float TimeStep { get; set; } = 0.01f;
 
     public AstronomicalSimulator(ComputeShader computeShader, SimulationState simulationState)
     {
@@ -64,10 +65,10 @@ public class AstronomicalSimulator
         }
     }
 
-    public void UpdateMasses(float deltaTime) // compute a single step from the simulation
+    public void UpdateMasses() // compute a single step from the simulation
     {
-        computeShader.SetFloat("deltaTime", deltaTime);
-        computeShader.SetFloat("halfDeltaTime", deltaTime * 0.5f);
+        computeShader.SetFloat("deltaTime", TimeStep);
+        computeShader.SetFloat("halfDeltaTime", TimeStep * 0.5f);
         computeShader.Dispatch(stepSimId, numMasses / ComputeThreads, 1, 1); 
     }
 
