@@ -14,6 +14,7 @@ public static class FileHelper
     private static BinaryWriter recordingWriter;
     private static BinaryReader replayReader;
     private static int replayingNumMasses;
+    public static int replayStep;
     private static AstronomicalSimulator currentAstronomicalSimulator;
 
     public static void InitializeDirectories()
@@ -76,8 +77,7 @@ public static class FileHelper
         }
         catch (Exception)
         {
-            Debug.Log("Unable to open stream file");
-            return;
+            throw new InvalidOperationException("Unable to open file");
         }
         
         replayReader = new BinaryReader(replayFile);
@@ -87,12 +87,13 @@ public static class FileHelper
 
         currentAstronomicalSimulator = astronomicalSimulator;
         IsReplaying = true;
-        UpdateStateReplay(1);
+        replayStep = 1;
+        UpdateStateReplay();
     }
 
-    public static void UpdateStateReplay(int step)
+    public static void UpdateStateReplay()
     {
-        if (step == 0) return;
+        if (replayStep == 0) return;
         if (!IsReplaying)
         {
             throw new InvalidOperationException("Replay has not been started");
@@ -134,7 +135,16 @@ public static class FileHelper
                 PointMassesBuffer[offset + zeroIndex] = 0;
             }
         }
-        //streamingReader.BaseStream.Position += (step - 1) * stateSize;
+
+        try
+        {
+            replayReader.BaseStream.Position += (replayStep - 1) * stateSize;
+        }
+        catch (Exception)
+        {
+            replayStep = 0;
+        }
+
         currentAstronomicalSimulator.SetSimulationStateNonAllocBytes(PointMassesBuffer, replayingNumMasses);
     }
 
@@ -245,8 +255,7 @@ public static class FileHelper
         }
         catch (Exception)
         {
-            Debug.Log("Unable to open state file");
-            return;
+            throw new InvalidOperationException("Unable to open file");
         }
 
         using var binaryReader = new BinaryReader(stateFile);

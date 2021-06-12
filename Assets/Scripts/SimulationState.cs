@@ -60,7 +60,7 @@ public class SimulationState
             pos.y = Random.Range(-5.0f, 5.0f);
 
             var vel = Vector3.Cross(pos, Vector3.up).normalized * Mathf.Sqrt(pos.magnitude) *
-                      20.15500f; // circular motion
+                      15.15500f; // circular motion
             //pos.x += 1000;
 
             masses[index] = new PointMassState
@@ -69,7 +69,7 @@ public class SimulationState
                 // Position = new Vector3(201, 211, 221),
                 // Velocity = new Vector3(301, 311, 321),
                 // Acceleration = new Vector3(401, 411, 421),
-                Mass = 40000000000,
+                Mass = 10000000000000,
                 Position = pos,
                 Velocity = vel,
                 Acceleration = Vector3.zero

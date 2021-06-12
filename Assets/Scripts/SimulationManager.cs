@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class SimulationManager : MonoBehaviour
@@ -30,7 +31,7 @@ public class SimulationManager : MonoBehaviour
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
         displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
         
-        promptManager.ShowPrompt("Enter your name:", "No thanks", "Submit", PromptCallback, true);
+        //promptManager.ShowPrompt("Enter your name:", "No thanks", "Submit", PromptCallback, true);
     }
 
     private void OnDisable()
@@ -46,8 +47,27 @@ public class SimulationManager : MonoBehaviour
             promptManager.ShowPrompt("Really quit?", "No", "Yes", QuitPromptCallback, false);
         }
         
+        if (FileHelper.IsRecording && !freezeSimulation)
+        {
+            FileHelper.UpdateStateRecording();
+        }
+        
+        if (promptManager.IsPrompting)
+        {
+            return;
+        }
+        
+        if (!lockCamera)
+        {
+            firstPersonCamera.ProcessCamera();
+        }
+        
         if (Input.GetKeyDown(KeyCode.F))
         {
+            if (FileHelper.IsReplaying && freezeSimulation && FileHelper.replayStep == 0)
+            {
+                FileHelper.replayStep = 1;
+            }
             freezeSimulation = !freezeSimulation;
         }
 
@@ -57,15 +77,15 @@ public class SimulationManager : MonoBehaviour
             Cursor.lockState = lockCamera ? CursorLockMode.None : CursorLockMode.Locked;
         }
 
-        if (Input.GetKeyDown(KeyCode.F7))
+        if (Input.GetKeyDown(KeyCode.F7)) // Save simulation state
         {
-            SaveSimulationState();
+            promptManager.ShowPrompt("Enter state file name to save:", "Cancel", "Save", SaveSimulationStateCallback);
             Debug.Log("Saved simulation state");
         }
 
-        if (Input.GetKeyDown(KeyCode.F8))
+        if (Input.GetKeyDown(KeyCode.F8)) // Load simulation state
         {
-            LoadSimulationState();
+            promptManager.ShowPrompt("Enter state file name to load:", "Cancel", "Load", LoadSimulationStateCallback);
             Debug.Log("Loaded simulation state");
         }
 
@@ -91,26 +111,38 @@ public class SimulationManager : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Period))
         {
-            astronomicalSimulator.TimeStep *= 2;
-            displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
+            freezeSimulation = false;
+            if (FileHelper.IsReplaying)
+            {
+                FileHelper.replayStep += 1;
+                
+            }
+            else
+            {
+                astronomicalSimulator.TimeStep *= 2;
+                displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
+            }
         }
 
         if (Input.GetKeyDown(KeyCode.Comma))
         {
-            astronomicalSimulator.TimeStep *= 0.5f;
-            displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
-        }
-
-        if (!lockCamera)
-        {
-            firstPersonCamera.ProcessCamera();
+            freezeSimulation = false;
+            if (FileHelper.IsReplaying)
+            {
+                FileHelper.replayStep -= 1;
+            }
+            else
+            {
+                astronomicalSimulator.TimeStep *= 0.5f;
+                displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
+            }
         }
 
         if (Input.GetKeyDown(KeyCode.F9))
         {
-            if (!FileHelper.IsRecording)
+            if (!FileHelper.IsRecording && !FileHelper.IsReplaying)
             {
-                FileHelper.StartStateRecording(astronomicalSimulator);
+                promptManager.ShowPrompt("Enter recording file name:", "Cancel", "Record", StartRecordingCallback);
                 Debug.Log("Started recording");
             }
             else
@@ -122,22 +154,16 @@ public class SimulationManager : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.F10))
         {
-            if (!FileHelper.IsReplaying)
+            if (!FileHelper.IsReplaying && !FileHelper.IsRecording)
             {
-                FileHelper.StartStateReplay(astronomicalSimulator);
+                promptManager.ShowPrompt("Enter stream file name to replay:", "Cancel", "Replay", StartReplayCallback);
                 Debug.Log("Started replay");
-                astronomicalRenderer.SetBuffers();
             }
             else
             {
                 FileHelper.EndStateReplay();
                 Debug.Log("Ended replay");
             }
-        }
-
-        if (FileHelper.IsRecording && !freezeSimulation)
-        {
-            FileHelper.UpdateStateRecording();
         }
 
         // astronomicalSimulator.GetTotalEnergy();
@@ -149,44 +175,67 @@ public class SimulationManager : MonoBehaviour
         //TextLogger.Log($"{Time.time},{data.z}");
     }
 
-    public void PromptCallback(bool rightButtonClicked, string inputResult)
-    {
-        if (rightButtonClicked)
-        {
-            Debug.Log("Right prompt button clicked");
-        }
-        else
-        {
-            Debug.Log("Left prompt button clicked");
-        }
-
-        if (inputResult == null)
-        {
-            Debug.Log("The input was null");
-            return;
-        } 
-        
-        Debug.Log($"The input is {inputResult}");
-    }
-
-    public void QuitPromptCallback(bool rightButtonClicked, string inputResult)
+    private void QuitPromptCallback(bool rightButtonClicked, string inputResult)
     {
         if (!rightButtonClicked) return;
         FileHelper.CloseFiles();
         Application.Quit();
     }
+    
+    private void SaveSimulationStateCallback(bool right, string fileName)
+    {
+        if (!right) return;
+        FileHelper.SaveSimulationState(fileName, astronomicalSimulator);
+    }
+
+    private void LoadSimulationStateCallback(bool right, string fileName)
+    {
+        if (!right) return;
+        try
+        {
+            FileHelper.LoadSimulationState(fileName, astronomicalSimulator);
+            astronomicalRenderer.SetBuffers();
+        }
+        catch (InvalidOperationException)
+        {
+            
+        }
+    }
+
+    private void StartRecordingCallback(bool right, string fileName)
+    {
+        if (!right) return;
+        FileHelper.StartStateRecording(fileName, astronomicalSimulator);
+    }
+
+    private void StartReplayCallback(bool right, string fileName)
+    {
+        if (!right) return;
+        try{
+            FileHelper.StartStateReplay(fileName, astronomicalSimulator);
+            astronomicalRenderer.SetBuffers();
+        }
+        catch (InvalidOperationException)
+        {
+            
+        }
+    }
 
     public void SetSimulationState(SimulationState simulationState, float timeStep)
     {
+        if (FileHelper.IsReplaying)
+        {
+            FileHelper.EndStateReplay();
+        }
+
+        if (FileHelper.IsRecording)
+        {
+            FileHelper.EndStateRecording();
+        }
         astronomicalSimulator.ReleaseBuffers(true);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
         astronomicalSimulator.TimeStep = timeStep;
-    }
-
-    public float GetTimeStep()
-    {
-        return astronomicalSimulator.TimeStep;
     }
 
     public void SetTimeStep(float timeStep)
@@ -238,9 +287,8 @@ public class SimulationManager : MonoBehaviour
         
         if (FileHelper.IsReplaying && !freezeSimulation)
         {
-            FileHelper.UpdateStateReplay(1);
+            FileHelper.UpdateStateReplay();
             astronomicalRenderer.SetBuffers();
-            Debug.Log("Replay update!");
         } 
 
         if (renderMasses)
@@ -257,18 +305,7 @@ public class SimulationManager : MonoBehaviour
         }
     }
 
-    private void SaveSimulationStateCallback(bool right, string fileName)
-    {
-        if (!right) return;
-        FileHelper.SaveSimulationState(fileName, astronomicalSimulator);
-    }
-
-    private void LoadSimulationStateCallback(bool right, string fileName)
-    {
-        if (!right) return;
-        FileHelper.LoadSimulationState(fileName, astronomicalSimulator);
-        astronomicalRenderer.SetBuffers();
-    }
+    
 
     private void SaveScreenshot()
     {

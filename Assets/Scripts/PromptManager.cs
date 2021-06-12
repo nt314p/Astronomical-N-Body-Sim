@@ -29,7 +29,7 @@ public class PromptManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI leftButtonText;
     [SerializeField] private TextMeshProUGUI rightButtonText;
 
-    public void ShowPrompt(string prompt, string leftButtonText, string rightButtonText, Action<bool, string> resultCallback, bool useInput)
+    public void ShowPrompt(string prompt, string leftButtonText, string rightButtonText, Action<bool, string> resultCallback, bool useInput=true)
     {
         if (IsPrompting)
         {
@@ -42,6 +42,7 @@ public class PromptManager : MonoBehaviour
 
         IsPrompting = true;
         promptText.text = prompt;
+        promptInput.text = "";
         this.leftButtonText.text = leftButtonText;
         this.rightButtonText.text = rightButtonText;
         promptResult = resultCallback;

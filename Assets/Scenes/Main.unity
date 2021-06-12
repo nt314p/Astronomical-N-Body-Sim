@@ -442,9 +442,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'General
-
-    H
+  m_text: 'H
 
     K
 
@@ -452,11 +450,13 @@ MonoBehaviour:
 
     F
 
+    WASD
+
+    Space, Left Shift
+
     Period
 
     Comma
-
-    Tab
 
 
     Graphics
@@ -3058,12 +3058,12 @@ GameObject:
   - component: {fileID: 587418027}
   - component: {fileID: 587418026}
   m_Layer: 5
-  m_Name: fpsText (1)
+  m_Name: statusText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &587418025
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6139,9 +6139,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '
-
-    Toggle help
+  m_text: 'Toggle help
 
     Toggle settings menu
 
@@ -6150,12 +6148,14 @@ MonoBehaviour:
     Toggle
     pause simulation
 
-    Increase timestep
+    Horizontal movement
+
+    Vertical movement
+
+    Increase
+    timestep
 
     Decrease timestep
-
-    Switch setting
-    menus
 
 
 
@@ -6165,14 +6165,15 @@ MonoBehaviour:
 
 
 
-    Save simulation state
-
-    Load
+    Save
     simulation state
+
+    Load simulation state
 
     Toggle simulation recording
 
-    Toggle simuation replay
+    Toggle
+    simuation replay
 
 '
   m_isRightToLeft: 0
@@ -6804,7 +6805,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1250646459
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6984,7 +6985,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1333460338
 RectTransform:
   m_ObjectHideFlags: 0

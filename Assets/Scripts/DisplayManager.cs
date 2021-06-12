@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Globalization;
 using TMPro;
@@ -65,37 +66,69 @@ public class DisplayManager : MonoBehaviour
 
     public void OnTimeStepEndEdit()
     {
-        simulationManager.SetTimeStep(float.Parse(timeStepInput.text));
+        try
+        {
+            simulationManager.SetTimeStep(float.Parse(timeStepInput.text));
+        }
+        catch (Exception)
+        {
+        }
     }
     
     public void OnBodiesEndEdit()
     {
-        var bodies = Mathf.RoundToInt(int.Parse(bodiesInput.text) / 512.0f) * 512;
-        bodies = Mathf.Max(bodies, 512);
-        bodies = Mathf.Min(bodies, 65536);
-        bodiesInput.text = bodies.ToString();
+        try
+        {
+            var bodies = Mathf.RoundToInt(int.Parse(bodiesInput.text) / 512.0f) * 512;
+            bodies = Mathf.Max(bodies, 512);
+            bodies = Mathf.Min(bodies, 65536);
+            bodiesInput.text = bodies.ToString();
+        }
+        catch (Exception)
+        {
+        }
     }
 
     public void OnMinColorSpeedUpdate()
     {
-        simulationManager.SetMinColorSpeed(float.Parse(minColorSpeedInput.text));
+        try
+        {
+            simulationManager.SetMinColorSpeed(float.Parse(minColorSpeedInput.text));
+        }
+        catch (Exception)
+        {
+
+        }
     }
     
     public void OnMaxColorSpeedUpdate()
     {
-        simulationManager.SetMaxColorSpeed(float.Parse(maxColorSpeedInput.text));
+        try
+        {
+            simulationManager.SetMaxColorSpeed(float.Parse(maxColorSpeedInput.text));
+        }
+        catch (Exception)
+        {
+        }
     }
 
     public void OnRegenerateGalaxy()
     {
-        var numMasses = int.Parse(bodiesInput.text);
-        var mass = float.Parse(massInput.text) * 1000000f;
-        var initialVelocity = float.Parse(initialVelocityInput.text);
-        var galaxyRadius = float.Parse(galaxyRadiusInput.text);
-        var distributionRelation = (RadiusRelation) distributionDropdown.value;
-        var velocityRelation = (RadiusRelation) velocityDropdown.value;
-        var simulationState = new SimulationState(numMasses, mass, initialVelocity, galaxyRadius, distributionRelation,
-            velocityRelation);
-        simulationManager.SetSimulationState(simulationState, float.Parse(timeStepInput.text));
+        try
+        {
+            var numMasses = int.Parse(bodiesInput.text);
+            var mass = float.Parse(massInput.text) * 1000000f;
+            var initialVelocity = float.Parse(initialVelocityInput.text);
+            var galaxyRadius = float.Parse(galaxyRadiusInput.text);
+            var distributionRelation = (RadiusRelation) distributionDropdown.value;
+            var velocityRelation = (RadiusRelation) velocityDropdown.value;
+            var simulationState = new SimulationState(numMasses, mass, initialVelocity, galaxyRadius, distributionRelation,
+                velocityRelation);
+            simulationManager.SetSimulationState(simulationState, float.Parse(timeStepInput.text));
+        }
+        catch (Exception)
+        {
+            // invalid input
+        }
     }
 }
