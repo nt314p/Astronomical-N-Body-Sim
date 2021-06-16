@@ -29,7 +29,7 @@ public static class FileHelper
         }
     }
     
-    public static bool SaveScreenshot(Texture2D texture)
+    public static void SaveScreenshot(Texture2D texture)
     {
         var bytes = texture.EncodeToPNG();
         var maxScreenshotNum = -1;
@@ -54,7 +54,6 @@ public static class FileHelper
         
         var path = "Screenshots/screenshot" + maxScreenshotNum + ".png";
         File.WriteAllBytes(path, bytes);
-        return true;
     }
 
     public static void StartStateReplay(string fileName, AstronomicalSimulator astronomicalSimulator)
@@ -70,16 +69,8 @@ public static class FileHelper
         }
 
         var path = $"Saves/{fileName}.simstream";
-        FileStream replayFile;
-        try
-        {
-            replayFile = File.Open(path, FileMode.Open);
-        }
-        catch (Exception)
-        {
-            throw new InvalidOperationException("Unable to open file");
-        }
-        
+        var replayFile = File.Open(path, FileMode.Open);
+
         replayReader = new BinaryReader(replayFile);
         replayingNumMasses = replayReader.ReadInt32();
 
@@ -138,11 +129,23 @@ public static class FileHelper
 
         try
         {
-            replayReader.BaseStream.Position += (replayStep - 1) * stateSize;
+            
+            if (replayReader.BaseStream.Position < replayReader.BaseStream.Length)
+            {
+                replayReader.BaseStream.Position += (replayStep - 1) * stateSize;
+            }
+            else
+            {
+                replayReader.BaseStream.Position = replayReader.BaseStream.Length;
+                replayStep = 0;
+                throw new InvalidOperationException("Reached end of replay");
+            }
         }
-        catch (Exception)
+        catch (ArgumentOutOfRangeException e) // beginning of replay
         {
             replayStep = 0;
+            Debug.Log(e.StackTrace);
+            throw;
         }
 
         currentAstronomicalSimulator.SetSimulationStateNonAllocBytes(PointMassesBuffer, replayingNumMasses);
@@ -248,16 +251,8 @@ public static class FileHelper
     public static void LoadSimulationState(string fileName, AstronomicalSimulator astronomicalSimulator)
     {
         var path = $"Saves/{fileName}.simstate";
-        FileStream stateFile;
-        try
-        {
-            stateFile = File.Open(path, FileMode.Open);
-        }
-        catch (Exception)
-        {
-            throw new InvalidOperationException("Unable to open file");
-        }
-
+        var stateFile = File.Open(path, FileMode.Open);
+        
         using var binaryReader = new BinaryReader(stateFile);
         var numMasses = (int) stateFile.Length / SizeOfPointMassState;
         binaryReader.Read(PointMassesBuffer, 0, (int) stateFile.Length);

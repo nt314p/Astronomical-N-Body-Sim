@@ -45,7 +45,7 @@ public class AstronomicalRenderer
     
     public void SetMaxColorSpeed(float maxSpeed)
     {
-        computeShader.SetFloat(minColorSpeedId, maxSpeed);
+        computeShader.SetFloat(maxColorSpeedId, maxSpeed);
     }
 
     public RenderTexture RenderMasses(Vector2Int dimensions, bool useFadeProcessing = false)

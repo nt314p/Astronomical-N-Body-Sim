@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using UnityEngine;
 
 public class SimulationManager : MonoBehaviour
@@ -69,6 +70,7 @@ public class SimulationManager : MonoBehaviour
                 FileHelper.replayStep = 1;
             }
             freezeSimulation = !freezeSimulation;
+            displayManager.SetMessage(freezeSimulation ? "Simulation paused" : "Simulation simulating");
         }
 
         if (Input.GetKeyDown(KeyCode.L))
@@ -80,13 +82,11 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.F7)) // Save simulation state
         {
             promptManager.ShowPrompt("Enter state file name to save:", "Cancel", "Save", SaveSimulationStateCallback);
-            Debug.Log("Saved simulation state");
         }
 
         if (Input.GetKeyDown(KeyCode.F8)) // Load simulation state
         {
             promptManager.ShowPrompt("Enter state file name to load:", "Cancel", "Load", LoadSimulationStateCallback);
-            Debug.Log("Loaded simulation state");
         }
 
         if (Input.GetKeyDown(KeyCode.H))
@@ -102,6 +102,7 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.F1))
         {
             SaveScreenshot();
+            displayManager.SetMessage("Took screenshot");
         }
 
         if (Input.GetKeyDown(KeyCode.F2))
@@ -140,15 +141,21 @@ public class SimulationManager : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.F9))
         {
-            if (!FileHelper.IsRecording && !FileHelper.IsReplaying)
+            if (!FileHelper.IsRecording)
             {
-                promptManager.ShowPrompt("Enter recording file name:", "Cancel", "Record", StartRecordingCallback);
-                Debug.Log("Started recording");
+                try
+                {
+                    promptManager.ShowPrompt("Enter recording file name:", "Cancel", "Record", StartRecordingCallback);
+                }
+                catch (Exception e)
+                {
+                    displayManager.SetMessage(e.Message);
+                }
             }
             else
             {
                 FileHelper.EndStateRecording();
-                Debug.Log("Ended recording");
+                displayManager.SetMessage("Ended recording");
             }
         }
 
@@ -156,13 +163,19 @@ public class SimulationManager : MonoBehaviour
         {
             if (!FileHelper.IsReplaying && !FileHelper.IsRecording)
             {
-                promptManager.ShowPrompt("Enter stream file name to replay:", "Cancel", "Replay", StartReplayCallback);
-                Debug.Log("Started replay");
+                try
+                {
+                    promptManager.ShowPrompt("Enter stream file name to replay:", "Cancel", "Replay", StartReplayCallback);
+                }
+                catch (Exception e)
+                {
+                    displayManager.SetMessage(e.Message);
+                }
             }
             else
             {
                 FileHelper.EndStateReplay();
-                Debug.Log("Ended replay");
+                displayManager.SetMessage("Ended replay");
             }
         }
 
@@ -185,7 +198,15 @@ public class SimulationManager : MonoBehaviour
     private void SaveSimulationStateCallback(bool right, string fileName)
     {
         if (!right) return;
-        FileHelper.SaveSimulationState(fileName, astronomicalSimulator);
+        try
+        {
+            FileHelper.SaveSimulationState(fileName, astronomicalSimulator);
+            displayManager.SetMessage("Saved simulation state");
+        }
+        catch (Exception)
+        {
+            displayManager.SetMessage("Unable to save file");
+        }
     }
 
     private void LoadSimulationStateCallback(bool right, string fileName)
@@ -195,10 +216,15 @@ public class SimulationManager : MonoBehaviour
         {
             FileHelper.LoadSimulationState(fileName, astronomicalSimulator);
             astronomicalRenderer.SetBuffers();
+            displayManager.SetMessage("Loaded simulation state");
         }
-        catch (InvalidOperationException)
+        catch (FileNotFoundException)
         {
-            
+            displayManager.SetMessage("Unable to find file");
+        }
+        catch (Exception)
+        {
+            displayManager.SetMessage("Unable to load file");
         }
     }
 
@@ -206,18 +232,25 @@ public class SimulationManager : MonoBehaviour
     {
         if (!right) return;
         FileHelper.StartStateRecording(fileName, astronomicalSimulator);
+        displayManager.SetMessage("Started recording");
     }
 
     private void StartReplayCallback(bool right, string fileName)
     {
         if (!right) return;
-        try{
+        try
+        {
             FileHelper.StartStateReplay(fileName, astronomicalSimulator);
             astronomicalRenderer.SetBuffers();
+            displayManager.SetMessage("Started replay");
         }
-        catch (InvalidOperationException)
+        catch (FileNotFoundException)
         {
-            
+            displayManager.SetMessage("Unable to find file");
+        }
+        catch (Exception)
+        {
+            displayManager.SetMessage("Unable to replay file");
         }
     }
 
@@ -287,8 +320,19 @@ public class SimulationManager : MonoBehaviour
         
         if (FileHelper.IsReplaying && !freezeSimulation)
         {
-            FileHelper.UpdateStateReplay();
-            astronomicalRenderer.SetBuffers();
+            try
+            {
+                FileHelper.UpdateStateReplay();
+                astronomicalRenderer.SetBuffers();
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                displayManager.SetMessage("Reached beginning of replay file");
+            }
+            catch (InvalidOperationException)
+            {
+                displayManager.SetMessage("Reached end of replay file");
+            }
         } 
 
         if (renderMasses)
@@ -316,5 +360,6 @@ public class SimulationManager : MonoBehaviour
         RenderTexture.active = null;
 
         FileHelper.SaveScreenshot(texture);
+        displayManager.SetMessage("Took screenshot");
     }
 }

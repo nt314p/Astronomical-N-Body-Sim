@@ -20,7 +20,7 @@ public class DisplayManager : MonoBehaviour
     [SerializeField] private TMP_Dropdown velocityDropdown;
     [SerializeField] private TMP_InputField minColorSpeedInput;
     [SerializeField] private TMP_InputField maxColorSpeedInput;
-
+    [SerializeField] private TextMeshProUGUI statusText;
 
     public void Start()
     {
@@ -74,6 +74,11 @@ public class DisplayManager : MonoBehaviour
         {
         }
     }
+
+    public void SetMessage(string message)
+    {
+        statusText.text = message;
+    }
     
     public void OnBodiesEndEdit()
     {
@@ -125,10 +130,11 @@ public class DisplayManager : MonoBehaviour
             var simulationState = new SimulationState(numMasses, mass, initialVelocity, galaxyRadius, distributionRelation,
                 velocityRelation);
             simulationManager.SetSimulationState(simulationState, float.Parse(timeStepInput.text));
+            SetMessage("Regenerated galaxy");
         }
         catch (Exception)
         {
-            // invalid input
+            SetMessage("Invalid galaxy parameters");
         }
     }
 }

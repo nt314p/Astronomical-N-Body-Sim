@@ -3063,7 +3063,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &587418025
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3080,8 +3080,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -235.43, y: 78}
-  m_SizeDelta: {x: 411.6508, y: 100.38}
+  m_AnchoredPosition: {x: -263, y: 89}
+  m_SizeDelta: {x: 448.5829, y: 109.1683}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &587418026
 MonoBehaviour:
@@ -3103,7 +3103,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Status:'
+  m_text: 'Status: okay'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4b6621d0d5e091942ac439022dbf9930, type: 2}
   m_sharedMaterial: {fileID: -8552020003692410101, guid: 4b6621d0d5e091942ac439022dbf9930,
@@ -3139,7 +3139,7 @@ MonoBehaviour:
   m_fontSizeMax: 72
   m_fontStyle: 0
   m_HorizontalAlignment: 4
-  m_VerticalAlignment: 256
+  m_VerticalAlignment: 1024
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_wordSpacing: 0
@@ -6170,9 +6170,9 @@ MonoBehaviour:
 
     Load simulation state
 
-    Toggle simulation recording
+    Start/end simulation recording
 
-    Toggle
+    Start/end
     simuation replay
 
 '
@@ -9272,6 +9272,7 @@ MonoBehaviour:
   velocityDropdown: {fileID: 808646427}
   minColorSpeedInput: {fileID: 10982939}
   maxColorSpeedInput: {fileID: 921218687}
+  statusText: {fileID: 587418026}
 --- !u!4 &1752046020
 Transform:
   m_ObjectHideFlags: 0
