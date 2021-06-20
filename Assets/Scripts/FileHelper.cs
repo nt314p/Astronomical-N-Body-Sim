@@ -14,7 +14,7 @@ public static class FileHelper
     private static BinaryWriter recordingWriter;
     private static BinaryReader replayReader;
     private static int replayingNumMasses;
-    public static int replayStep;
+    public static int ReplayStep;
     private static AstronomicalSimulator currentAstronomicalSimulator;
 
     public static void InitializeDirectories()
@@ -34,10 +34,6 @@ public static class FileHelper
         var bytes = texture.EncodeToPNG();
         var maxScreenshotNum = -1;
         
-        if (!Directory.Exists("Screenshots"))
-        {
-            Directory.CreateDirectory("Screenshots");
-        }
         var files = Directory.GetFiles("Screenshots/", "screenshot*.png");
 
         foreach (var file in files)
@@ -78,13 +74,14 @@ public static class FileHelper
 
         currentAstronomicalSimulator = astronomicalSimulator;
         IsReplaying = true;
-        replayStep = 1;
+        ReplayStep = 1;
         UpdateStateReplay();
+        ReplayStep = 0;
     }
 
     public static void UpdateStateReplay()
     {
-        if (replayStep == 0) return;
+        if (ReplayStep == 0) return;
         if (!IsReplaying)
         {
             throw new InvalidOperationException("Replay has not been started");
@@ -130,21 +127,20 @@ public static class FileHelper
         try
         {
             
-            if (replayReader.BaseStream.Position < replayReader.BaseStream.Length)
+            if (replayReader.BaseStream.Position < replayReader.BaseStream.Length || ReplayStep < 0)
             {
-                replayReader.BaseStream.Position += (replayStep - 1) * stateSize;
+                replayReader.BaseStream.Position += (ReplayStep - 1) * stateSize;
             }
             else
             {
                 replayReader.BaseStream.Position = replayReader.BaseStream.Length;
-                replayStep = 0;
+                ReplayStep = 0;
                 throw new InvalidOperationException("Reached end of replay");
             }
         }
         catch (ArgumentOutOfRangeException e) // beginning of replay
         {
-            replayStep = 0;
-            Debug.Log(e.StackTrace);
+            ReplayStep = 0;
             throw;
         }
 

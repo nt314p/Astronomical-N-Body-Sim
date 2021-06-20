@@ -1,5 +1,4 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 using Random = UnityEngine.Random;
 
 public struct PointMassState
@@ -20,33 +19,12 @@ public enum RadiusRelation
 
 public class SimulationState
 {
-    private PointMassState[] masses;
+    private readonly PointMassState[] masses;
     public int NumMasses => masses.Length;
 
     public SimulationState(PointMassState[] masses)
     {
         this.masses = masses;
-    }
-
-    public SimulationState()
-    {
-        masses = new[]
-        {
-            new PointMassState
-            {
-                Mass = 100,
-                Position = new Vector3(200, 210, 220),
-                Velocity = new Vector3(300, 310, 320),
-                Acceleration = new Vector3(400, 410, 420),
-            },
-            new PointMassState
-            {
-                Mass = 101,
-                Position = new Vector3(201, 211, 221),
-                Velocity = new Vector3(301, 311, 321),
-                Acceleration = new Vector3(401, 411, 421),
-            }
-        };
     }
 
     public SimulationState(int numMasses)
@@ -109,8 +87,7 @@ public class SimulationState
                     speed = 1;
                     break;
             }
-            
-            
+
             radius *= galaxyRadius;
 
             var pos = (Vector3) Random.insideUnitCircle.normalized;
@@ -134,6 +111,5 @@ public class SimulationState
         }
     }
     
-
     public PointMassState[] StateMasses => masses;
 }

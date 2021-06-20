@@ -64,6 +64,11 @@ public class DisplayManager : MonoBehaviour
         timeStepInput.text = timeStep.ToString(CultureInfo.InvariantCulture);
     }
 
+    public void UpdateTimeStepTextMultiplier(int timeStep)
+    {
+        timeStepInput.text = $"{timeStep}x";
+    }
+
     public void OnTimeStepEndEdit()
     {
         try
@@ -102,7 +107,6 @@ public class DisplayManager : MonoBehaviour
         }
         catch (Exception)
         {
-
         }
     }
     
