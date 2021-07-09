@@ -11,6 +11,7 @@ public class AstronomicalRenderer
     private readonly int numMasses;
     private readonly int processTextureId;
     private readonly int renderMassesId;
+    private readonly int clearTextureId;
     private readonly int minColorSpeedId;
     private readonly int maxColorSpeedId;
 
@@ -22,6 +23,7 @@ public class AstronomicalRenderer
 
         processTextureId = computeShader.FindKernel("ProcessTexture");
         renderMassesId = computeShader.FindKernel("RenderMasses");
+        clearTextureId = computeShader.FindKernel("ClearTexture");
         minColorSpeedId = Shader.PropertyToID("minColorSpeed");
         maxColorSpeedId = Shader.PropertyToID("maxColorSpeed");
 
@@ -50,17 +52,29 @@ public class AstronomicalRenderer
 
     public RenderTexture RenderMasses(Vector2Int dimensions, bool useFadeProcessing = false)
     {
-        if (renderTexture == null || !useFadeProcessing)
+        if (renderTexture == null)
         {
-            if (renderTexture != null)
-                renderTexture.Release();
-            
-            renderTexture = new RenderTexture(dimensions.x, dimensions.y, 0);
-
+            renderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
+            computeShader.SetTexture(clearTextureId, "renderTexture", renderTexture);
             computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
             computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
+        }
+        
+        if (renderTexture == null || !useFadeProcessing)
+        {
+            computeShader.Dispatch(clearTextureId, (renderTexture.width / 32) + 1, (renderTexture.height / 8) + 1, 1);
+            //GL.Clear(true, true, Color.black);
+            // if (renderTexture != null)
+            //     renderTexture.Release();
+            
+            //renderTexture = new RenderTexture(dimensions.x, dimensions.y, 0);
+
+            // renderTexture.enableRandomWrite = true;
+            // renderTexture.Create();
+            // computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
+            // computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
         }
 
         if (useFadeProcessing)

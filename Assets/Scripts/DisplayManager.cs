@@ -21,12 +21,26 @@ public class DisplayManager : MonoBehaviour
     [SerializeField] private TMP_InputField minColorSpeedInput;
     [SerializeField] private TMP_InputField maxColorSpeedInput;
     [SerializeField] private TextMeshProUGUI statusText;
+    public bool IsEditingAny { get; set; }
 
-    public void Start()
+    private void Start()
     {
         StartCoroutine(UpdateFPSText());
         OnMinColorSpeedUpdate();
         OnMaxColorSpeedUpdate();
+    }
+
+    private void Update()
+    {
+        var editing = false;
+        editing |= timeStepInput.isFocused;
+        editing |= bodiesInput.isFocused;
+        editing |= massInput.isFocused;
+        editing |= initialVelocityInput.isFocused;
+        editing |= galaxyRadiusInput.isFocused;
+        editing |= minColorSpeedInput.isFocused;
+        editing |= maxColorSpeedInput.isFocused;
+        IsEditingAny = editing;
     }
 
     private IEnumerator UpdateFPSText()
@@ -140,5 +154,10 @@ public class DisplayManager : MonoBehaviour
         {
             SetMessage("Invalid galaxy parameters");
         }
+    }
+
+    public void SetTimeStepReadOnly(bool readOnly)
+    {
+        timeStepInput.readOnly = readOnly;
     }
 }

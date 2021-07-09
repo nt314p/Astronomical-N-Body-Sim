@@ -9,8 +9,8 @@ public static class FileHelper
     private static readonly byte[] PointMassesBuffer = new byte[65536 * SizeOfPointMassState];
     private static readonly byte[] StreamingBuffer = new byte[65536 * SizeOfStreamPointMassState];
     private static readonly byte[] StreamingMasses = new byte[65536 * sizeof(float)];
-    public static bool IsRecording { get; private set; } = false;
-    public static bool IsReplaying { get; private set; } = false;
+    public static bool IsRecording { get; private set; }
+    public static bool IsReplaying { get; private set; }
     private static BinaryWriter recordingWriter;
     private static BinaryReader replayReader;
     private static int replayingNumMasses;
@@ -138,7 +138,7 @@ public static class FileHelper
                 throw new InvalidOperationException("Reached end of replay");
             }
         }
-        catch (ArgumentOutOfRangeException e) // beginning of replay
+        catch (ArgumentOutOfRangeException) // beginning of replay
         {
             ReplayStep = 0;
             throw;

@@ -15,7 +15,7 @@ public class SimulationManager : MonoBehaviour
     [SerializeField] private bool useFadeProcessing;
     [SerializeField] private bool renderMasses = true;
     [SerializeField] private bool lockCamera;
-
+    
     private bool FreezeSimulation
     {
         get => freezeSimulation;
@@ -27,6 +27,10 @@ public class SimulationManager : MonoBehaviour
                 string direction = FileHelper.ReplayStep >= 0 ? "forward" : "reverse";
                 displayManager.SetMessage(freezeSimulation ? "Replay paused" : $"Replay replaying ({direction})");
             }
+            else if (FileHelper.IsRecording)
+            {
+                displayManager.SetMessage(freezeSimulation ? "Recording of simulation paused" : "Recording simulation");
+            }
             else
             {
                 displayManager.SetMessage(freezeSimulation ? "Simulation paused" : "Simulation simulating");
@@ -37,9 +41,9 @@ public class SimulationManager : MonoBehaviour
     private AstronomicalSimulator astronomicalSimulator;
     private AstronomicalRenderer astronomicalRenderer;
 
-    private float previousEnergy = 0;
+    private float previousEnergy;
     private float[] energies = new float[20];
-    private int energiesIndex = 0;
+    private int energiesIndex;
 
     private void Awake()
     {
@@ -49,8 +53,6 @@ public class SimulationManager : MonoBehaviour
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
         displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
-        
-        //promptManager.ShowPrompt("Enter your name:", "No thanks", "Submit", PromptCallback, true);
     }
 
     private void OnDisable()
@@ -71,7 +73,7 @@ public class SimulationManager : MonoBehaviour
             FileHelper.UpdateStateRecording();
         }
         
-        if (promptManager.IsPrompting)
+        if (promptManager.IsPrompting || displayManager.IsEditingAny)
         {
             return;
         }
@@ -178,6 +180,7 @@ public class SimulationManager : MonoBehaviour
             {
                 FileHelper.EndStateRecording();
                 displayManager.SetMessage("Ended recording");
+                displayManager.SetTimeStepReadOnly(false);
             }
         }
 
@@ -200,15 +203,12 @@ public class SimulationManager : MonoBehaviour
                 displayManager.SetMessage("Ended replay");
                 displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
                 freezeSimulation = true;
+                displayManager.SetTimeStepReadOnly(false);
             }
         }
 
         // astronomicalSimulator.GetTotalEnergy();
-
         //LogEnergies();
-
-        // LoadSimulationState();
-        // SaveSimulationState();
         //TextLogger.Log($"{Time.time},{data.z}");
     }
 
@@ -257,6 +257,7 @@ public class SimulationManager : MonoBehaviour
         if (!right) return;
         FileHelper.StartStateRecording(fileName, astronomicalSimulator);
         displayManager.SetMessage("Started recording");
+        displayManager.SetTimeStepReadOnly(true);
     }
 
     private void StartReplayCallback(bool right, string fileName)
@@ -270,6 +271,7 @@ public class SimulationManager : MonoBehaviour
             displayManager.UpdateTimeStepTextMultiplier(FileHelper.ReplayStep);
             freezeSimulation = true;
             displayManager.SetMessage("Started replay");
+            displayManager.SetTimeStepReadOnly(true);
         }
         catch (FileNotFoundException)
         {

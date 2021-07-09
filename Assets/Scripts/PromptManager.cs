@@ -9,7 +9,7 @@ public class PromptManager : MonoBehaviour
     public bool IsPrompting
     {
         get => isPrompting;
-        set
+        private set
         {
             isPrompting = value;
             promptGameObject.SetActive(value);
@@ -21,10 +21,11 @@ public class PromptManager : MonoBehaviour
     private const int PromptWithNoInputHeight = 220;
     private Action<bool, string> promptResult;
     private bool isInputPrompt;
-    private bool previousCursorLockState = false;
+    private bool previousCursorLockState;
     [SerializeField] private TMP_InputField promptInput;
     [SerializeField] private GameObject promptGameObject;
     [SerializeField] private GameObject promptInputGameObject;
+    [SerializeField] private RectTransform promptRectTransform;
     [SerializeField] private TextMeshProUGUI promptText;
     [SerializeField] private TextMeshProUGUI leftButtonText;
     [SerializeField] private TextMeshProUGUI rightButtonText;
@@ -33,7 +34,6 @@ public class PromptManager : MonoBehaviour
     {
         if (IsPrompting)
         {
-            Debug.Log("Prompt already shown");
             return;
         }
 
@@ -43,8 +43,8 @@ public class PromptManager : MonoBehaviour
         IsPrompting = true;
         promptText.text = prompt;
         promptInput.text = "";
-        this.leftButtonText.text = leftButtonMessage;
-        this.rightButtonText.text = rightButtonMessage;
+        leftButtonText.text = leftButtonMessage;
+        rightButtonText.text = rightButtonMessage;
         promptResult = resultCallback;
         isInputPrompt = useInput;
         ConfigurePrompt();
@@ -53,7 +53,7 @@ public class PromptManager : MonoBehaviour
     private void ConfigurePrompt()
     {
         promptInputGameObject.SetActive(isInputPrompt);
-        promptGameObject.GetComponent<RectTransform>().sizeDelta = new Vector2(PromptWidth, isInputPrompt ? PromptWithInputHeight : PromptWithNoInputHeight);
+        promptRectTransform.sizeDelta = new Vector2(PromptWidth, isInputPrompt ? PromptWithInputHeight : PromptWithNoInputHeight);
     }
 
     public void OnClickLeftButton()

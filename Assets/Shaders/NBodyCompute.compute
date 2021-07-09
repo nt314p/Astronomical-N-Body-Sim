@@ -3,6 +3,7 @@
 #pragma kernel ComputeTotalEnergy
 #pragma kernel ProcessTexture
 #pragma kernel RenderMasses
+#pragma kernel ClearTexture
 
 #define threadsX 512 // threads per group
 #define G_u 0.0000000000667408 // universal gravitational constant
@@ -21,9 +22,9 @@ struct Motion
 	float3 acceleration;
 };
 
-RWStructuredBuffer<PointMass> masses : register(u0);
-RWStructuredBuffer<Motion> motions : register(u1); 
-RWStructuredBuffer<float2> readout : register(u2);
+RWStructuredBuffer<PointMass> masses;// : register(u0);
+RWStructuredBuffer<Motion> motions;// : register(u1); 
+RWStructuredBuffer<float2> readout;// : register(u2);
 RWTexture2D<float4> renderTexture;// :register(u3);
 
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
@@ -50,23 +51,21 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	float3 vel = m.velocity;
 	float3 accel = 0;
 
-	GroupMemoryBarrierWithGroupSync();
-
-	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // updating position using velocity Verlet integration
-
 	for (uint i = 0; i < numMasses; i += threadsX) // calculate net acceleration WORKS BETTER
 	{
 		uint index = groupIndex + i;
 		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
-		//[unroll(threadsX)]
+		GroupMemoryBarrierWithGroupSync();
+		
 		for (uint i2 = 0; i2 < threadsX; ++i2)
 		{
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
 			float mass = p.mass;
 			float3 deltaPos = p.position - pos;
-			float3 invDist = rsqrt(dot(deltaPos, deltaPos));
-			float3 cubeInverse = invDist * invDist * invDist;
-			if (id.x != index)
+			float sqrMagnitude = dot(deltaPos, deltaPos);
+			float invDist = rsqrt(sqrMagnitude);
+			float cubeInverse = invDist * invDist * invDist;
+			if (id.x != index && sqrMagnitude != 0)
 			{
 				accel += deltaPos * (mass * cubeInverse);
 			}
@@ -77,8 +76,9 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
 
+	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // updating position using velocity Verlet integration
 	vel += (m.acceleration + accel) * halfDeltaTime; // updating velocity using velocity Verlet integration
-
+	
 	masses[id.x].position = pos; // save state
 	m.velocity = vel;
 	m.acceleration = accel;
@@ -138,7 +138,6 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 	readout[id.x] = float2(Ekinetic, Epotential);
 }
 
-
 // Fade kernel, subtracts color from all pixels
 [numthreads(32, 8, 1)]
 void ProcessTexture(uint3 id : SV_DispatchThreadID)
@@ -146,4 +145,11 @@ void ProcessTexture(uint3 id : SV_DispatchThreadID)
 	float4 originalValue = renderTexture[id.xy];
 	float4 fadedValue = max(0, originalValue - 0.05);
 	renderTexture[id.xy] = fadedValue;
+}
+
+// Clear texture kernel
+[numthreads(32, 8, 1)]
+void ClearTexture(uint3 id : SV_DispatchThreadID)
+{
+	renderTexture[id.xy] = 0;
 }
