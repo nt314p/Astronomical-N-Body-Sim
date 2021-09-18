@@ -379,8 +379,6 @@ public class SimulationManager : MonoBehaviour
         }
     }
 
-    
-
     private void SaveScreenshot()
     {
         var rt = astronomicalRenderer.GetRenderTexture();
