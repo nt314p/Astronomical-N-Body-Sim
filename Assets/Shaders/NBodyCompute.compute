@@ -7,13 +7,12 @@
 
 #define threadsX 512 // threads per group
 #define G_u 0.0000000000667408 // universal gravitational constant
-#define a_b 0.06637 // acceleration due to a 10^30 kg mass at 1 exameter away (10^15 m)
 #define particleRadius 6
 
 struct PointMass
 {
-	float mass; // planned [in 10^30 kilograms]
-	float3 position; // planned [in petameters (10^15 meters)]
+	float mass;
+	float3 position;
 };
 
 struct Motion
@@ -51,31 +50,26 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	float3 vel = m.velocity;
 	float3 accel = 0;
 
-	for (uint i = 0; i < numMasses; i += threadsX) // calculate net acceleration WORKS BETTER
+	for (uint i = 0; i < numMasses; i += threadsX)
 	{
 		uint index = groupIndex + i;
 		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
 		GroupMemoryBarrierWithGroupSync();
-		
+
 		for (uint i2 = 0; i2 < threadsX; ++i2)
 		{
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
-			float mass = p.mass;
 			float3 deltaPos = p.position - pos;
-			float sqrMagnitude = dot(deltaPos, deltaPos);
-			float invDist = rsqrt(sqrMagnitude);
+			float invDist = rsqrt(dot(deltaPos, deltaPos)); // 1/sqrt(mag^2) = 1/mag
+			invDist = id.x == index ? 0 : invDist;
 			float cubeInverse = invDist * invDist * invDist;
-			if (id.x != index && sqrMagnitude != 0)
-			{
-				accel += deltaPos * (mass * cubeInverse);
-			}
+			accel += deltaPos * (p.mass * cubeInverse);
 		}
 	}
-
-	accel *= G_u;
 	
 	GroupMemoryBarrierWithGroupSync(); // sync threads before translating masses
 
+	accel *= G_u;
 	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime; // updating position using velocity Verlet integration
 	vel += (m.acceleration + accel) * halfDeltaTime; // updating velocity using velocity Verlet integration
 	
