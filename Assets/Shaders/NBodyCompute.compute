@@ -52,8 +52,9 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 
 	for (uint i = 0; i < numMasses; i += threadsX)
 	{
-		uint index = groupIndex + i;
-		threadGroupPointMasses[groupIndex] = masses[index]; // each thread copies global data into thread memory
+		uint globalIndex = groupIndex + i;
+		threadGroupPointMasses[groupIndex] = masses[globalIndex]; // each thread copies global data into thread memory
+
 		GroupMemoryBarrierWithGroupSync(); // ensure that all of thread memory is populated before manipulating
 
 		for (uint i2 = 0; i2 < threadsX; ++i2)
@@ -61,7 +62,7 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
 			float3 deltaPos = p.position - pos;
 			float invDist = rsqrt(dot(deltaPos, deltaPos)); // 1/sqrt(mag^2) = 1/mag
-			invDist = id.x == index ? 0 : invDist; // suppress infinity -> 0
+			invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
 			accel += deltaPos * (p.mass * invDist * invDist * invDist);
 		}
 	}
@@ -69,6 +70,8 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 	accel *= G_u;
 	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime;
 	vel += (m.acceleration + accel) * halfDeltaTime;
+
+	GroupMemoryBarrierWithGroupSync();
 	
 	masses[id.x].position = pos;
 	m.velocity = vel;
