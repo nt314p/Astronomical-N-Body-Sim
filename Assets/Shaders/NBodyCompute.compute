@@ -3,6 +3,8 @@
 #pragma kernel ComputeTotalEnergy
 #pragma kernel ProcessTexture
 #pragma kernel RenderMasses
+#pragma kernel ComputePositions
+#pragma kernel RenderStars
 #pragma kernel ClearTexture
 
 #define threadsX 512 // threads per group
@@ -23,6 +25,7 @@ struct Motion
 
 RWStructuredBuffer<PointMass> masses;// : register(u0);
 RWStructuredBuffer<Motion> motions;// : register(u1); 
+RWStructuredBuffer<float2> screenPositions;
 RWStructuredBuffer<float2> readout;// : register(u2);
 RWTexture2D<float4> renderTexture;// :register(u3);
 
@@ -106,6 +109,28 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	GroupMemoryBarrierWithGroupSync();
 	renderTexture[(uint2) screenPos + uint2(0, -1)] += val * 0.4;
 	GroupMemoryBarrierWithGroupSync();
+}
+
+[numthreads(256, 1, 1)]
+void ComputePositions(uint3 id: SV_DispatchThreadID)
+{
+	float3 pos = masses[id.x].position;
+	float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
+	float w = screenPos.w;
+	screenPositions[id.x] = screenPos / w / step(0, w); // divide by 0 if w is negative, results in infinity
+}
+
+[numthreads(32, 32, 1)]
+void RenderStars(uint3 id: SV_DispatchThreadID)
+{
+	float sum = 0;
+	const float2 pos = id.xy;
+	for (uint i = 0; i < numMasses; i++)
+	{
+		float2 diff = screenPositions[i] - pos;
+		sum += 1.0f / dot(diff, diff);
+	}
+	renderTexture[id.xy] += 1000.0f * sum / numMasses;
 }
 
 [numthreads(256, 1, 1)]

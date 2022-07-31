@@ -8,10 +8,14 @@ public class AstronomicalRenderer
 
     private readonly AstronomicalSimulator astronomicalSimulator;
 
+    public ComputeBuffer ScreenPositionsComputeBuffer;
+
     private readonly int numMasses;
     private readonly int processTextureId;
     private readonly int renderMassesId;
     private readonly int clearTextureId;
+    private readonly int computePositionsId;
+    private readonly int renderStarsId;
     private readonly int minColorSpeedId;
     private readonly int maxColorSpeedId;
 
@@ -24,6 +28,8 @@ public class AstronomicalRenderer
         processTextureId = computeShader.FindKernel("ProcessTexture");
         renderMassesId = computeShader.FindKernel("RenderMasses");
         clearTextureId = computeShader.FindKernel("ClearTexture");
+        computePositionsId = computeShader.FindKernel("ComputePositions");
+        renderStarsId = computeShader.FindKernel("RenderStars");
         minColorSpeedId = Shader.PropertyToID("minColorSpeed");
         maxColorSpeedId = Shader.PropertyToID("maxColorSpeed");
 
@@ -32,6 +38,13 @@ public class AstronomicalRenderer
         
         computeShader.SetBuffer(renderMassesId, "masses", astronomicalSimulator.MassesBuffer);
         computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
+
+        computeShader.SetBuffer(computePositionsId, "masses", astronomicalSimulator.MassesBuffer);
+
+        ScreenPositionsComputeBuffer = new ComputeBuffer(numMasses, 8);
+        ScreenPositionsComputeBuffer.SetData(new Vector2[numMasses]);
+        computeShader.SetBuffer(computePositionsId, "screenPositions", ScreenPositionsComputeBuffer);
+        computeShader.SetBuffer(renderStarsId, "screenPositions", ScreenPositionsComputeBuffer);
     }
 
     public void SetBuffers()
@@ -60,6 +73,7 @@ public class AstronomicalRenderer
             computeShader.SetTexture(clearTextureId, "renderTexture", renderTexture);
             computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
             computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
+            computeShader.SetTexture(renderStarsId, "renderTexture", renderTexture);
         }
         
         if (renderTexture == null || !useFadeProcessing)
@@ -79,7 +93,7 @@ public class AstronomicalRenderer
 
         if (useFadeProcessing)
         {
-            computeShader.Dispatch(processTextureId, (renderTexture.width / 32) + 1, (renderTexture.height / 8) + 1, 1);
+            computeShader.Dispatch(processTextureId, renderTexture.width / 32 + 1, renderTexture.height / 8 + 1, 1);
         }
 
         var viewToScreen = Matrix4x4.Scale(new Vector3(renderTexture.width, renderTexture.height, 1));
@@ -90,8 +104,11 @@ public class AstronomicalRenderer
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix); 
         computeShader.SetVector("cameraPosition", camera.transform.position);
 
-        computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
-        
+        computeShader.Dispatch(computePositionsId, numMasses / 256, 1, 1);
+
+        //computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
+        computeShader.Dispatch(renderStarsId, renderTexture.width / 32 + 1, renderTexture.height / 32 + 1, 1);
+
         return renderTexture;
     }
     
