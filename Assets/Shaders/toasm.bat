@@ -1,2 +1,3 @@
-fxc "NBodyCompute.compute" /Cc /T cs_5_0 /E StepSimulation
+@echo off
+fxc "NBodyCompute.compute" /Cc /T cs_5_0 /E RenderStars
 pause

@@ -30,6 +30,7 @@ RWStructuredBuffer<float2> readout;// : register(u2);
 RWTexture2D<float4> renderTexture;// :register(u3);
 
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
+groupshared float2 threadGroupScreenPositions[1024];
 
 uint numMasses;
 float deltaTime;
@@ -121,16 +122,26 @@ void ComputePositions(uint3 id: SV_DispatchThreadID)
 }
 
 [numthreads(32, 32, 1)]
-void RenderStars(uint3 id: SV_DispatchThreadID)
+void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 {
 	float sum = 0;
 	const float2 pos = id.xy;
-	for (uint i = 0; i < numMasses; i++)
+	for (uint i = 0; i < numMasses; i += 1024)
 	{
-		float2 diff = screenPositions[i] - pos;
-		sum += 1.0f / dot(diff, diff);
+		uint globalIndex = groupIndex + i;
+		threadGroupScreenPositions[groupIndex] = screenPositions[globalIndex]; // each thread copies global data into thread memory
+
+		GroupMemoryBarrierWithGroupSync();
+		
+		for (uint i2 = 0; i2 < min(numMasses - i, 1024); i2++)
+		{
+			float2 diff = threadGroupScreenPositions[i2] - pos;
+			sum += 1.0f / dot(diff, diff);
+		}
+
+		GroupMemoryBarrierWithGroupSync();
 	}
-	renderTexture[id.xy] += 1000.0f * sum / numMasses;
+	renderTexture[id.xy] = 1000.0f * sum / numMasses;
 }
 
 [numthreads(256, 1, 1)]

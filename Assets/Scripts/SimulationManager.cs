@@ -59,6 +59,7 @@ public class SimulationManager : MonoBehaviour
     {
         Debug.Log("SimulationManager disabled, releasing buffers");
         astronomicalSimulator.ReleaseBuffers(true);
+        astronomicalRenderer.ReleaseBuffers();
     }
 
     private void Update()

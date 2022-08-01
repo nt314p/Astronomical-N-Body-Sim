@@ -53,6 +53,12 @@ public class AstronomicalRenderer
         computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
     }
 
+    public void ReleaseBuffers()
+    {
+        ScreenPositionsComputeBuffer?.Release();
+        ScreenPositionsComputeBuffer = null;
+    }
+
     public void SetMinColorSpeed(float minSpeed)
     {
         computeShader.SetFloat(minColorSpeedId, minSpeed);
