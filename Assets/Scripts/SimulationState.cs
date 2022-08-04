@@ -33,7 +33,7 @@ public class SimulationState
 
         for (var index = 0; index < numMasses; index++) // create a little galaxy
         {
-            Vector3 pos = Random.insideUnitSphere * 100;
+            var pos = Random.insideUnitSphere * 100;
             // pos.z = pos.y;
             pos.y = Random.Range(-5.0f, 5.0f);
 
@@ -43,10 +43,6 @@ public class SimulationState
 
             masses[index] = new PointMassState
             {
-                // Mass = 101,
-                // Position = new Vector3(201, 211, 221),
-                // Velocity = new Vector3(301, 311, 321),
-                // Acceleration = new Vector3(401, 411, 421),
                 Mass = 10000000000000,
                 Position = pos,
                 Velocity = vel,

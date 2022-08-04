@@ -49,7 +49,7 @@ public class SimulationManager : MonoBehaviour
     {
         Application.targetFrameRate = 60;
         FileHelper.InitializeDirectories();
-        var simulationState = new SimulationState(2048);
+        var simulationState = new SimulationState(512);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
         displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);

@@ -8,6 +8,8 @@
 #pragma kernel ClearTexture
 
 #define threadsX 512 // threads per group
+#define renderThreadLength 32
+#define renderThreads renderThreadLength * renderThreadLength
 #define G_u 0.0000000000667408 // universal gravitational constant
 #define particleRadius 6
 
@@ -25,12 +27,14 @@ struct Motion
 
 RWStructuredBuffer<PointMass> masses;// : register(u0);
 RWStructuredBuffer<Motion> motions;// : register(u1); 
-RWStructuredBuffer<float2> screenPositions;
 RWStructuredBuffer<float2> readout;// : register(u2);
 RWTexture2D<float4> renderTexture;// :register(u3);
 
+RWStructuredBuffer<float2> screenPositions;
+RWTexture2D<uint> cellData; // uint: upper 2 bytes of data holds the offset, lower 2 bytes holds the length
+
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
-groupshared float2 threadGroupScreenPositions[1024];
+groupshared float2 threadGroupScreenPositions[renderThreads];
 
 uint numMasses;
 float deltaTime;
@@ -69,6 +73,8 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 			invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
 			accel += deltaPos * (p.mass * invDist * invDist * invDist);
 		}
+		
+		GroupMemoryBarrierWithGroupSync();
 	}
 	
 	accel *= G_u;
@@ -121,19 +127,19 @@ void ComputePositions(uint3 id: SV_DispatchThreadID)
 	screenPositions[id.x] = screenPos / w / step(0, w); // divide by 0 if w is negative, results in infinity
 }
 
-[numthreads(32, 32, 1)]
+[numthreads(renderThreadLength, renderThreadLength, 1)]
 void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 {
 	float sum = 0;
 	const float2 pos = id.xy;
-	for (uint i = 0; i < numMasses; i += 1024)
+	for (uint i = 0; i < numMasses; i += renderThreads)
 	{
 		uint globalIndex = groupIndex + i;
 		threadGroupScreenPositions[groupIndex] = screenPositions[globalIndex]; // each thread copies global data into thread memory
 
 		GroupMemoryBarrierWithGroupSync();
 		
-		for (uint i2 = 0; i2 < min(numMasses - i, 1024); i2++)
+		for (uint i2 = 0; i2 < min(numMasses - i, renderThreads); i2++)
 		{
 			float2 diff = threadGroupScreenPositions[i2] - pos;
 			sum += 1.0f / dot(diff, diff);
@@ -142,6 +148,7 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 		GroupMemoryBarrierWithGroupSync();
 	}
 	renderTexture[id.xy] = 1000.0f * sum / numMasses;
+	if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 1) renderTexture[id.xy] = 1;
 }
 
 [numthreads(256, 1, 1)]
