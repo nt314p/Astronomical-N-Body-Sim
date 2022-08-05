@@ -128,10 +128,32 @@ void ComputePositions(uint3 id: SV_DispatchThreadID)
 }
 
 [numthreads(renderThreadLength, renderThreadLength, 1)]
-void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
+void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex, uint3 groupId : SV_GroupID)
 {
 	float sum = 0;
 	const float2 pos = id.xy;
+
+	for (int i = -1; i <= 1; i++)
+	{
+		uint2 centerIndex = groupId.xy + uint2(0, i);
+		uint cell = cellData[centerIndex];
+		uint length = cell & 0xFFFF; // the length across all three cells in a row
+		uint offset = cell >> 16; // the offset in the global screenPositions array
+		cell = cellData[centerIndex + uint2(-1, 0)]; // load cell to the left
+		uint dataLength = cell & 0xFFFF;
+		offset -= dataLength;
+		length += dataLength;
+		cell = cellData[centerIndex + uint2(1, 0)]; // cell to the right
+		length += cell & 0xFFFF;
+
+		for (uint i2 = 0; i2 < length; i2++) 
+		{
+			float2 diff = screenPositions[offset + i2] - pos;
+			sum += 1.0f / dot(diff, diff);
+		}
+	}
+	
+	/*
 	for (uint i = 0; i < numMasses; i += renderThreads)
 	{
 		uint globalIndex = groupIndex + i;
@@ -146,9 +168,9 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 		}
 
 		GroupMemoryBarrierWithGroupSync();
-	}
+	}*/
 	renderTexture[id.xy] = 1000.0f * sum / numMasses;
-	if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 1) renderTexture[id.xy] = 1;
+	//if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 1) renderTexture[id.xy] = 1;
 }
 
 [numthreads(256, 1, 1)]
