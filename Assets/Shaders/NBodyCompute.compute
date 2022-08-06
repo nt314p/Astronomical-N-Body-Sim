@@ -31,7 +31,7 @@ RWStructuredBuffer<float2> readout;// : register(u2);
 RWTexture2D<float4> renderTexture;// :register(u3);
 
 RWStructuredBuffer<float2> screenPositions;
-RWTexture2D<uint> cellData; // uint: upper 2 bytes of data holds the offset, lower 2 bytes holds the length
+Texture2D<uint> cellData; // uint: upper 2 bytes of data holds the offset, lower 2 bytes holds the length
 
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
 groupshared float2 threadGroupScreenPositions[renderThreads];
@@ -132,7 +132,22 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex,
 {
 	float sum = 0;
 	const float2 pos = id.xy;
+	
+	uint cell = cellData.Load(groupId);
+	uint length = cell & 0xFFFF; // the length across all three cells in a row
+	uint offset = cell >> 16; // the offset in the global screenPositions array
+	
+	for (uint i2 = 0; i2 < length; i2++) 
+	{
+		float2 diff = screenPositions[offset + i2] - pos;
+		sum += 1.0f / dot(diff, diff);
+	}
 
+	renderTexture[id.xy] = sum;//(offset >> (15 - id.x/2)) & 1;
+	if (length == 0) renderTexture[id.xy] = float4(0, 0, 1, 1);
+	if (!isfinite(sum)) renderTexture[id.xy] = float4(1, 0, 0, 1);
+	
+	/*
 	for (int i = -1; i <= 1; i++)
 	{
 		uint2 centerIndex = groupId.xy + uint2(0, i);
@@ -151,7 +166,7 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex,
 			float2 diff = screenPositions[offset + i2] - pos;
 			sum += 1.0f / dot(diff, diff);
 		}
-	}
+	}*/
 	
 	/*
 	for (uint i = 0; i < numMasses; i += renderThreads)
@@ -169,8 +184,11 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex,
 
 		GroupMemoryBarrierWithGroupSync();
 	}*/
-	renderTexture[id.xy] = 1000.0f * sum / numMasses;
-	//if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 1) renderTexture[id.xy] = 1;
+	
+	//renderTexture[pos] = 1000.0f * sum / numMasses;
+
+	if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 1) renderTexture[id.xy] = float4(1, 0, 1, 1);
+	//if (!any(renderTexture[pos])) renderTexture[pos] = float4(1, 0, 1, 1);
 }
 
 [numthreads(256, 1, 1)]
