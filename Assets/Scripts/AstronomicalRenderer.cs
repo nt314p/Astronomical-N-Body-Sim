@@ -132,17 +132,12 @@ public class AstronomicalRenderer
         computeShader.Dispatch(computePositionsId, numMasses / 256, 1, 1);
         SortScreenPositions();
         
-        
+        ScreenPositionsComputeBuffer.SetData(screenPositionsBuffer);
+
         //computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
         computeShader.Dispatch(renderStarsId, renderTexture.width / 32 + 1, renderTexture.height / 32 + 1, 1);
 
         return renderTexture;
-    }
-    
-    private int CompareVectors(Vector2 a, Vector2 b)
-    {
-        var diff = a - b;
-        return cellData.GetLength(0) * diff.y + diff.x > 0 ? 1 : -1;
     }
 
     private void SortScreenPositions()
