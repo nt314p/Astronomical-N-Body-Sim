@@ -15,12 +15,14 @@ public class AstronomicalRenderer
 
     private readonly AstronomicalSimulator astronomicalSimulator;
 
-    private ComputeBuffer ScreenPositionsComputeBuffer;
+    private ComputeBuffer screenPositionsComputeBuffer;
     private Vector2[] screenPositionsBuffer;
     private Vector2[] screenPositionsTempBuffer;
+    
     private GridCellData[,] cellData;
     private uint[] cellDataTextureBuffer;
     private Texture2D cellDataTexture;
+    private Vector2Int cellDataDimensions;
 
     private readonly int numMasses;
     private readonly int processTextureId;
@@ -52,12 +54,12 @@ public class AstronomicalRenderer
 
         computeShader.SetBuffer(computePositionsId, "masses", astronomicalSimulator.MassesBuffer);
 
-        ScreenPositionsComputeBuffer = new ComputeBuffer(numMasses, 8);
+        screenPositionsComputeBuffer = new ComputeBuffer(numMasses, 8);
         screenPositionsBuffer = new Vector2[numMasses];
         screenPositionsTempBuffer = new Vector2[numMasses];
-        ScreenPositionsComputeBuffer.SetData(screenPositionsBuffer);
-        computeShader.SetBuffer(computePositionsId, "screenPositions", ScreenPositionsComputeBuffer);
-        computeShader.SetBuffer(renderStarsId, "screenPositions", ScreenPositionsComputeBuffer); 
+        screenPositionsComputeBuffer.SetData(screenPositionsBuffer);
+        computeShader.SetBuffer(computePositionsId, "screenPositions", screenPositionsComputeBuffer);
+        computeShader.SetBuffer(renderStarsId, "screenPositions", screenPositionsComputeBuffer); 
     }
 
     public void SetBuffers()
@@ -68,8 +70,8 @@ public class AstronomicalRenderer
 
     public void ReleaseBuffers()
     {
-        ScreenPositionsComputeBuffer?.Release();
-        ScreenPositionsComputeBuffer = null;
+        screenPositionsComputeBuffer?.Release();
+        screenPositionsComputeBuffer = null;
     }
 
     public void SetMinColorSpeed(float minSpeed)
@@ -89,10 +91,14 @@ public class AstronomicalRenderer
             renderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
-            cellData = new GridCellData[renderTexture.width / 32 + 1, renderTexture.height / 32 + 1];
+            
+            cellDataDimensions.x = renderTexture.width / 32 + 1;
+            cellDataDimensions.y = renderTexture.height / 32 + 1;
+            
+            cellData = new GridCellData[cellDataDimensions.x, cellDataDimensions.y];
             cellDataTextureBuffer = new uint[cellData.Length];
-
-            cellDataTexture = new Texture2D(cellData.GetLength(0), cellData.GetLength(1), TextureFormat.RFloat, false);
+            
+            cellDataTexture = new Texture2D(cellDataDimensions.x, cellDataDimensions.y, TextureFormat.RFloat, false);
 
             computeShader.SetTexture(clearTextureId, "renderTexture", renderTexture);
             computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
@@ -127,15 +133,13 @@ public class AstronomicalRenderer
         // World to screen matrix derived by Wokarol
 
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix); 
-        computeShader.SetVector("cameraPosition", camera.transform.position);
 
         computeShader.Dispatch(computePositionsId, numMasses / 256, 1, 1);
         SortScreenPositions();
-        
-        ScreenPositionsComputeBuffer.SetData(screenPositionsBuffer);
+        screenPositionsComputeBuffer.SetData(screenPositionsBuffer);
 
         //computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
-        computeShader.Dispatch(renderStarsId, renderTexture.width / 32 + 1, renderTexture.height / 32 + 1, 1);
+        computeShader.Dispatch(renderStarsId, cellDataDimensions.x, cellDataDimensions.y, 1);
 
         return renderTexture;
     }
@@ -144,13 +148,14 @@ public class AstronomicalRenderer
     {
         Array.Clear(cellData, 0, cellData.Length);
         Array.Clear(cellDataTextureBuffer, 0, cellDataTextureBuffer.Length);
-        ScreenPositionsComputeBuffer.GetData(screenPositionsBuffer);
+        screenPositionsComputeBuffer.GetData(screenPositionsBuffer);
 
         foreach (var position in screenPositionsBuffer)
         {
             var x = (int)position.x / 32;
             var y = (int)position.y / 32;
             if (x < 0 || y < 0) continue;
+            if (x >= cellDataDimensions.x || y >= cellDataDimensions.y) continue;
             cellData[x, y].Length++;
         }
 
@@ -169,6 +174,8 @@ public class AstronomicalRenderer
         {
             var x = (int)position.x / 32;
             var y = (int)position.y / 32;
+            if (x < 0 || y < 0) continue;
+            if (x >= cellDataDimensions.x || y >= cellDataDimensions.y) continue;
             var index = cellData[x, y].Offset;
             cellData[x, y].Offset = (ushort) (index + 1);
 

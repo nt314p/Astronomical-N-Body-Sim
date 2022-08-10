@@ -10,7 +10,7 @@
 #define threadsX 512 // threads per group
 #define renderThreadLength 32
 #define renderThreads renderThreadLength * renderThreadLength
-#define G_u 0.0000000000667408 // universal gravitational constant
+#define G_u 0.000000667408 // universal gravitational constant
 #define particleRadius 6
 
 struct PointMass
@@ -39,7 +39,6 @@ groupshared float2 threadGroupScreenPositions[renderThreads];
 uint numMasses;
 float deltaTime;
 float halfDeltaTime;
-float3 cameraPosition;
 float4x4 worldToScreenMatrix;
 
 inline float3 hueToRGB(float h)
@@ -103,7 +102,6 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 	
 	float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
 
-	//float camDist = min(distance(cameraPosition, pos), 200);
 	float3 color = hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
 	float4 val =  w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
 	renderTexture[(uint2) screenPos] += val;
@@ -132,21 +130,8 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex,
 {
 	float3 sum = 0;
 	const float2 pos = id.xy;
-
-	/*
-	uint cell = cellData.Load(groupId);
-	uint length = cell & 0xFFFF; // the length across all three cells in a row
-	uint offset = cell >> 16; // the offset in the global screenPositions array
 	
-	for (uint i2 = 0; i2 < length; i2++) 
-	{
-		float2 diff = screenPositions[offset + i2] - pos;
-		sum += 1.0f / dot(diff, diff);
-	}
-
-	renderTexture[id.xy] = sum;//(offset >> (15 - id.x/2)) & 1;*/
-	
-	//[loop]
+	[loop]
 	for (int i = -1; i <= 1; i++)
 	{
 		int3 centerIndex = groupId + int3(0, i, 0);
@@ -154,19 +139,17 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex,
 		uint length = cell & 0xFFFF; // the length across all three cells in a row
 		uint offset = cell >> 16; // the offset in the global screenPositions array
 		
-		uint totalLength = length;
 		cell = cellData.Load(centerIndex + int3(-1, 0, 0)); // load cell to the left
 		uint dataLength = cell & 0xFFFF;
-		uint totalOffset = offset - dataLength;
-		totalLength += dataLength;
+		length += dataLength;
+		offset -= dataLength;
 		
 		cell = cellData.Load(centerIndex + int3(1, 0, 0)); // cell to the right
-		uint dataLength2 = cell & 0xFFFF;
-		totalLength += dataLength2;
+		length += cell & 0xFFFF;
 
-		for (uint i2 = 0; i2 < totalLength; i2++) 
+		for (uint i2 = 0; i2 < length; i2++) 
 		{
-			float2 starPos = screenPositions[totalOffset + i2];
+			float2 starPos = screenPositions[offset + i2];
 			float2 diff = starPos - pos;
 			float sqrMag = dot(diff, diff);
 			float smoothingStar = 1 - smoothstep(700, 1024, sqrMag);
@@ -177,27 +160,10 @@ void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex,
 		}
 	}
 	
-	renderTexture[id.xy] = 2*float4(sum * float3(0.4, 0.2, 0.5), 1);
+	renderTexture[id.xy] = 2 * float4(sum * float3(0.4, 0.2, 0.5), 1);
 	//renderTexture[pos] = 1000.0f * sum / numMasses;
 	//if (sum < 0.00001f)
 	//	renderTexture[id.xy] = float4(1, 0, 1, 1);
-	/*
-	if (groupThreadId.y == 15)
-	{
-		renderTexture[id.xy] = (offset) >> (15 - groupThreadId.x/2) & 1;
-	}
-	if (groupThreadId.y == 14)
-	{
-		renderTexture[id.xy] = (length) >> (15 - groupThreadId.x/2) & 1;
-	}*/
-	// if (groupThreadId.y == 13)
-	// {
-	// 	renderTexture[id.xy] = (dataLength2) >> (15 - groupThreadId.x/2) & 1;
-	// }
-	// if (groupThreadId.y == 12)
-	// {
-	// 	renderTexture[id.xy] = (totalLength) >> (15 - groupThreadId.x/2) & 1;
-	// }
 	
 	/*
 	for (uint i = 0; i < numMasses; i += renderThreads)

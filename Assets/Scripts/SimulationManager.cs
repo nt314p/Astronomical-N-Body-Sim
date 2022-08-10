@@ -49,7 +49,7 @@ public class SimulationManager : MonoBehaviour
     {
         Application.targetFrameRate = 60;
         FileHelper.InitializeDirectories();
-        var simulationState = new SimulationState(2048);
+        var simulationState = new SimulationState(10240);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
         displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
@@ -208,9 +208,8 @@ public class SimulationManager : MonoBehaviour
             }
         }
 
-        // astronomicalSimulator.GetTotalEnergy();
+        //astronomicalSimulator.GetTotalEnergy();
         //LogEnergies();
-        //TextLogger.Log($"{Time.time},{data.z}");
     }
 
     private void QuitPromptCallback(bool rightButtonClicked, string inputResult)
@@ -296,6 +295,7 @@ public class SimulationManager : MonoBehaviour
             FileHelper.EndStateRecording();
         }
         astronomicalSimulator.ReleaseBuffers(true);
+        astronomicalRenderer.ReleaseBuffers();
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
         astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
         astronomicalSimulator.TimeStep = timeStep;
