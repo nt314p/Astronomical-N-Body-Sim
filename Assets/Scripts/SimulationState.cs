@@ -38,7 +38,7 @@ public class SimulationState
             pos.y = Random.Range(-5.0f, 5.0f);
 
             var vel = Vector3.Cross(pos, Vector3.up).normalized * Mathf.Sqrt(pos.magnitude) *
-                      15.15500f; // circular motion
+                      20.15500f; // circular motion
             //pos.x += 1000;
 
             masses[index] = new PointMassState

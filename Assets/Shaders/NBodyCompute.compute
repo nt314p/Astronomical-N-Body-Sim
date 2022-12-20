@@ -6,6 +6,8 @@
 #pragma kernel ComputePositions
 #pragma kernel RenderStars
 #pragma kernel ClearTexture
+#pragma kernel Upsample
+#pragma kernel Downsample
 
 #define threadsX 512 // threads per group
 #define renderThreadLength 32
@@ -15,20 +17,24 @@
 
 struct PointMass
 {
-	float mass;
-	float3 position;
+    float mass;
+    float3 position;
 };
 
 struct Motion
 {
-	float3 velocity;
-	float3 acceleration;
+    float3 velocity;
+    float3 acceleration;
 };
 
-RWStructuredBuffer<PointMass> masses;// : register(u0);
-RWStructuredBuffer<Motion> motions;// : register(u1); 
-RWStructuredBuffer<float2> readout;// : register(u2);
-RWTexture2D<float4> renderTexture;// :register(u3);
+RWStructuredBuffer<PointMass> masses; // : register(u0);
+RWStructuredBuffer<Motion> motions; // : register(u1); 
+RWStructuredBuffer<float2> readout; // : register(u2);
+RWTexture2D<float4> renderTexture; // :register(u3);
+
+//RWTexture2DArray<float4> mipmaps;
+Texture2D srcTexture;
+RWTexture2D<float4> destTexture;
 
 RWStructuredBuffer<float2> screenPositions;
 Texture2D<uint> cellData; // uint: upper 2 bytes of data holds the offset, lower 2 bytes holds the length
@@ -43,49 +49,49 @@ float4x4 worldToScreenMatrix;
 
 inline float3 hueToRGB(float h)
 {
-	float r = abs(h * 6 - 3) - 1;
-	float g = 2 - abs(h * 6 - 2);
-	float b = 2 - abs(h * 6 - 4);
-	return saturate(float3(r, g, b));
+    float r = abs(h * 6 - 3) - 1;
+    float g = 2 - abs(h * 6 - 2);
+    float b = 2 - abs(h * 6 - 4);
+    return saturate(float3(r, g, b));
 }
 
 [numthreads(threadsX, 1, 1)]
 void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 {
-	float3 pos = masses[id.x].position;
-	Motion m = motions[id.x];
-	float3 vel = m.velocity;
-	float3 accel = 0;
+    float3 pos = masses[id.x].position;
+    Motion m = motions[id.x];
+    float3 vel = m.velocity;
+    float3 accel = 0;
 
-	for (uint i = 0; i < numMasses; i += threadsX)
-	{
-		uint globalIndex = groupIndex + i;
-		threadGroupPointMasses[groupIndex] = masses[globalIndex]; // each thread copies global data into thread memory
+    for (uint i = 0; i < numMasses; i += threadsX)
+    {
+        uint globalIndex = groupIndex + i;
+        threadGroupPointMasses[groupIndex] = masses[globalIndex]; // each thread copies global data into thread memory
 
-		GroupMemoryBarrierWithGroupSync(); // ensure that all of thread memory is populated before manipulating
+        GroupMemoryBarrierWithGroupSync(); // ensure that all of thread memory is populated before manipulating
 
-		for (uint i2 = 0; i2 < threadsX; ++i2)
-		{
-			PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
-			float3 deltaPos = p.position - pos;
-			float invDist = rsqrt(dot(deltaPos, deltaPos)); // 1/sqrt(mag^2) = 1/mag
-			invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
-			accel += deltaPos * (p.mass * invDist * invDist * invDist);
-		}
-		
-		GroupMemoryBarrierWithGroupSync();
-	}
-	
-	accel *= G_u;
-	pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime;
-	vel += (m.acceleration + accel) * halfDeltaTime;
+        for (uint i2 = 0; i2 < threadsX; ++i2)
+        {
+            PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
+            float3 deltaPos = p.position - pos;
+            float invDist = rsqrt(dot(deltaPos, deltaPos)); // 1/sqrt(mag^2) = 1/mag
+            invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
+            accel += deltaPos * (p.mass * invDist * invDist * invDist);
+        }
 
-	GroupMemoryBarrierWithGroupSync();
-	
-	masses[id.x].position = pos;
-	m.velocity = vel;
-	m.acceleration = accel;
-	motions[id.x] = m;
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    accel *= G_u;
+    pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime;
+    vel += (m.acceleration + accel) * halfDeltaTime;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    masses[id.x].position = pos;
+    m.velocity = vel;
+    m.acceleration = accel;
+    motions[id.x] = m;
 }
 
 float minColorSpeed;
@@ -94,133 +100,179 @@ float maxColorSpeed;
 [numthreads(256, 1, 1)]
 void RenderMasses(uint3 id : SV_DispatchThreadID)
 {
-	float3 pos = masses[id.x].position;
-	float3 vel = motions[id.x].velocity;
-	float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
-	float w = screenPos.w;
-	screenPos /= w;
-	
-	float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
+    float3 pos = masses[id.x].position;
+    float3 vel = motions[id.x].velocity;
+    float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
+    float w = screenPos.w;
+    screenPos /= w;
 
-	float3 color = hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
-	float4 val =  w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
-	renderTexture[(uint2) screenPos] += val;
-	GroupMemoryBarrierWithGroupSync();
-	renderTexture[(uint2) screenPos + uint2(1, 0)] += val * 0.4;
-	GroupMemoryBarrierWithGroupSync();
-	renderTexture[(uint2) screenPos + uint2(-1, 0)] += val * 0.4;
-	GroupMemoryBarrierWithGroupSync();
-	renderTexture[(uint2) screenPos + uint2(0, 1)] += val * 0.4;
-	GroupMemoryBarrierWithGroupSync();
-	renderTexture[(uint2) screenPos + uint2(0, -1)] += val * 0.4;
-	GroupMemoryBarrierWithGroupSync();
+    float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
+
+    float3 color = clamp(hueToRGB(frac(screenPos.x + screenPos.y * 1124.55)) + float3(0.4, 0.3, 0.6), 0, 1);
+    //hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
+    float4 val = w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
+    renderTexture[(uint2)screenPos] += val;
+    return;
+    GroupMemoryBarrierWithGroupSync();
+    renderTexture[(uint2)screenPos + uint2(1, 0)] += val * 0.4;
+    GroupMemoryBarrierWithGroupSync();
+    renderTexture[(uint2)screenPos + uint2(-1, 0)] += val * 0.4;
+    GroupMemoryBarrierWithGroupSync();
+    renderTexture[(uint2)screenPos + uint2(0, 1)] += val * 0.4;
+    GroupMemoryBarrierWithGroupSync();
+    renderTexture[(uint2)screenPos + uint2(0, -1)] += val * 0.4;
+    GroupMemoryBarrierWithGroupSync();
 }
 
 [numthreads(256, 1, 1)]
 void ComputePositions(uint3 id: SV_DispatchThreadID)
 {
-	float3 pos = masses[id.x].position;
-	float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
-	float w = screenPos.w;
-	screenPositions[id.x] = screenPos / w / step(0, w); // divide by 0 if w is negative, results in infinity
+    float3 pos = masses[id.x].position;
+    float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
+    float w = screenPos.w;
+    screenPositions[id.x] = screenPos / w / step(0, w); // divide by 0 if w is negative, results in infinity
 }
 
 [numthreads(renderThreadLength, renderThreadLength, 1)]
-void RenderStars(uint3 id: SV_DispatchThreadID, uint groupIndex : SV_GroupIndex, uint3 groupId : SV_GroupID, uint3 groupThreadId : SV_GroupThreadID)
+void RenderStars(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID)
 {
-	float3 sum = 0;
-	const float2 pos = id.xy;
-	
-	[loop]
-	for (int i = -1; i <= 1; i++)
-	{
-		int3 centerIndex = groupId + int3(0, i, 0);
-		uint cell = cellData.Load(centerIndex);
-		uint length = cell & 0xFFFF; // the length across all three cells in a row
-		uint offset = cell >> 16; // the offset in the global screenPositions array
-		
-		cell = cellData.Load(centerIndex + int3(-1, 0, 0)); // load cell to the left
-		uint dataLength = cell & 0xFFFF;
-		length += dataLength;
-		offset -= dataLength;
-		
-		cell = cellData.Load(centerIndex + int3(1, 0, 0)); // cell to the right
-		length += cell & 0xFFFF;
+    float3 sum = 0;
+    const float2 pos = id.xy;
 
-		for (uint i2 = 0; i2 < length; i2++) 
-		{
-			float2 starPos = screenPositions[offset + i2];
-			float2 diff = starPos - pos;
-			float sqrMag = dot(diff, diff);
-			float smoothingStar = 1 - smoothstep(700, 1024, sqrMag);
-			float smoothingFlare = 1 - smoothstep(300, 400, sqrMag);
-			float3 color = clamp(hueToRGB(frac(starPos.x + starPos.y*1124.55)) + float3(0.4, 0.3, 0.6), 0, 1);
-			sum += color * smoothingStar / sqrMag;
-			sum += color * smoothingFlare * max(0, 1 - abs(diff.x * diff.y / 4.0f));
-		}
-	}
-	
-	renderTexture[id.xy] = 2 * float4(sum * float3(0.4, 0.2, 0.5), 1);
-	//renderTexture[pos] = 1000.0f * sum / numMasses;
-	//if (sum < 0.00001f)
-	//	renderTexture[id.xy] = float4(1, 0, 1, 1);
-	
-	/*
-	for (uint i = 0; i < numMasses; i += renderThreads)
-	{
-		uint globalIndex = groupIndex + i;
-		threadGroupScreenPositions[groupIndex] = screenPositions[globalIndex]; // each thread copies global data into thread memory
+    [loop]
+    for (int i = -1; i <= 1; i++)
+    {
+        int3 centerIndex = groupId + int3(0, i, 0);
+        uint cell = cellData.Load(centerIndex);
+        uint length = cell & 0xFFFF; // the length across all three cells in a row
+        uint offset = cell >> 16; // the offset in the global screenPositions array
 
-		GroupMemoryBarrierWithGroupSync();
-		
-		for (uint i2 = 0; i2 < min(numMasses - i, renderThreads); i2++)
-		{
-			float2 diff = threadGroupScreenPositions[i2] - pos;
-			sum += 1.0f / dot(diff, diff);
-		}
+        cell = cellData.Load(centerIndex + int3(-1, 0, 0)); // load cell to the left
+        uint dataLength = cell & 0xFFFF;
+        length += dataLength;
+        offset -= dataLength;
 
-		GroupMemoryBarrierWithGroupSync();
-	}*/
-	
-	//if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 0) renderTexture[id.xy] = 1;
+        cell = cellData.Load(centerIndex + int3(1, 0, 0)); // cell to the right
+        length += cell & 0xFFFF;
+
+        for (uint i2 = 0; i2 < length; i2++)
+        {
+            float2 starPos = screenPositions[offset + i2];
+            float2 diff = starPos - pos;
+            float sqrMag = dot(diff, diff);
+            float smoothingStar = 1 - smoothstep(700, 1024, sqrMag);
+            float smoothingFlare = 1 - smoothstep(300, 350, sqrMag);
+            float3 color = clamp(hueToRGB(frac(starPos.x + starPos.y * 1124.55)) + float3(0.4, 0.3, 0.6), 0, 1);
+            sum += color * smoothingStar / sqrMag;
+            //sum += color * smoothingFlare * max(0, 1 - abs(diff.x * diff.y / 4.0f));
+        }
+    }
+
+    renderTexture[id.xy] = 2 * float4(sum * float3(0.4, 0.2, 0.5), 1);
+    //renderTexture[pos] = 1000.0f * sum / numMasses;
+    //if (sum < 0.00001f)
+    //	renderTexture[id.xy] = float4(1, 0, 1, 1);
+
+    /*
+    for (uint i = 0; i < numMasses; i += renderThreads)
+    {
+        uint globalIndex = groupIndex + i;
+        threadGroupScreenPositions[groupIndex] = screenPositions[globalIndex]; // each thread copies global data into thread memory
+
+        GroupMemoryBarrierWithGroupSync();
+        
+        for (uint i2 = 0; i2 < min(numMasses - i, renderThreads); i2++)
+        {
+            float2 diff = threadGroupScreenPositions[i2] - pos;
+            sum += 1.0f / dot(diff, diff);
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }*/
+
+    //if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 0) renderTexture[id.xy] = 1;
 }
 
 [numthreads(256, 1, 1)]
 void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 {
-	PointMass p = masses[id.x];
-	float Gm = G_u * p.mass;
-	float vel = motions[id.x].velocity;
-	float Ekinetic = 0.5f * vel * vel * p.mass;
-	float Epotential = 0;
+    PointMass p = masses[id.x];
+    float Gm = G_u * p.mass;
+    float vel = motions[id.x].velocity;
+    float Ekinetic = 0.5f * vel * vel * p.mass;
+    float Epotential = 0;
 
-	for (uint i = 0; i < numMasses; ++i)
-	{
-		PointMass po = masses[i];
-		float dist = length(p.position - po.position);
-		if (i != id.x)
-		{
-			Epotential -= po.mass / dist;
-		}
-	}
-	
-	Epotential *= Gm * 0.5; // correct duplicate pairwise interaction counts
+    for (uint i = 0; i < numMasses; ++i)
+    {
+        PointMass po = masses[i];
+        float dist = length(p.position - po.position);
+        if (i != id.x)
+        {
+            Epotential -= po.mass / dist;
+        }
+    }
 
-	readout[id.x] = float2(Ekinetic, Epotential);
+    Epotential *= Gm * 0.5; // correct duplicate pairwise interaction counts
+
+    readout[id.x] = float2(Ekinetic, Epotential);
+}
+
+
+// Downsample
+[numthreads(32, 8, 1)]
+void Downsample(uint3 id : SV_DispatchThreadID)
+{
+    float4 sample = 0;
+    sample += srcTexture.Load(2 * id.xyz + int3(-2, -2, 0));
+    sample += srcTexture.Load(2 * id.xyz + int3(-2, 2, 0));
+    sample += srcTexture.Load(2 * id.xyz + int3(2, -2, 0));
+    sample += srcTexture.Load(2 * id.xyz + int3(2, 2, 0));
+    sample += srcTexture.Load(2 * id.xyz + int3(-2, -1, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(-2, 1, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(2, -1, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(2, 1, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(-1, 2, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(1, 2, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(-1, -2, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(1, -2, 0)) * 2;
+    sample += srcTexture.Load(2 * id.xyz + int3(-1, -1, 0)) * 4;
+    sample += srcTexture.Load(2 * id.xyz + int3(-1, 1, 0)) * 4;
+    sample += srcTexture.Load(2 * id.xyz + int3(1, -1, 0)) * 4;
+    sample += srcTexture.Load(2 * id.xyz + int3(1, 1, 0)) * 4;
+    destTexture[id.xy] = sample * 0.03125;
+}
+
+
+// Upsample
+[numthreads(32, 8, 1)]
+void Upsample(uint3 id: SV_DispatchThreadID)
+{
+    float4 sample = 0;
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(-1, -1, 0));
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(0, -1, 0)) * 2;
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(1, -1, 0));
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(-1, 0, 0)) * 2;
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(0, 0, 0)) * 4;
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(1, 0, 0)) * 2;
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(-1, 1, 0));
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(0, 1, 0)) * 2;
+    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(1, 1, 0));
+
+    destTexture[id.xy] += sample * 0.0625;
 }
 
 // Fade kernel, subtracts color from all pixels
 [numthreads(32, 8, 1)]
 void ProcessTexture(uint3 id : SV_DispatchThreadID)
 {
-	float4 originalValue = renderTexture[id.xy];
-	float4 fadedValue = max(0, originalValue - 0.05);
-	renderTexture[id.xy] = fadedValue;
+    float4 originalValue = renderTexture[id.xy];
+    float4 fadedValue = max(0, originalValue - 0.05);
+    renderTexture[id.xy] = fadedValue;
 }
 
 // Clear texture kernel
 [numthreads(32, 8, 1)]
 void ClearTexture(uint3 id : SV_DispatchThreadID)
 {
-	renderTexture[id.xy] = 0;
+    renderTexture[id.xy] = 0;
 }

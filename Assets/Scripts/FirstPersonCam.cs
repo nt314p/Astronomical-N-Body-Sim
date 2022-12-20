@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class FirstPersonCam : MonoBehaviour
 {
@@ -7,10 +6,9 @@ public class FirstPersonCam : MonoBehaviour
     [SerializeField] private float ySensitivity = 4;
     [SerializeField] private float moveSpeed = 80;
 
-    private float pitch = 0;
-    private float yaw = 0;
-    public bool Locked { get; set; }
-    
+    private float pitch;
+    private float yaw;
+
     private void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
@@ -27,12 +25,12 @@ public class FirstPersonCam : MonoBehaviour
         var xAngle = xSensitivity * Input.GetAxis("Mouse X");
         var yAngle = -ySensitivity * Input.GetAxis("Mouse Y");
 
-        Vector3 a = transform.forward;
-        a.y = 0;
-        a = a.normalized;
-        Vector3 b = transform.forward;
+        var forward = transform.forward;
+        forward.y = 0;
+        forward = forward.normalized;
+        var b = transform.forward;
 
-        float angle = Vector3.Angle(a, b);
+        var angle = Vector3.Angle(forward, b);
 
         if (angle > 86)
         {

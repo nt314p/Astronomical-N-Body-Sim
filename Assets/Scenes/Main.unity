@@ -787,7 +787,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "10000000\u200B"
+  m_text: "100000\u200B"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 4b6621d0d5e091942ac439022dbf9930, type: 2}
   m_sharedMaterial: {fileID: -8552020003692410101, guid: 4b6621d0d5e091942ac439022dbf9930,
@@ -5295,8 +5295,8 @@ GameObject:
   m_Component:
   - component: {fileID: 963194228}
   - component: {fileID: 963194227}
-  - component: {fileID: 963194229}
   - component: {fileID: 963194230}
+  - component: {fileID: 963194226}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -5304,6 +5304,68 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &963194226
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963194225}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f6ac9400dc247af9c215d33743e2d59, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cam: {fileID: 963194227}
+  moveAction:
+    m_Name: Move
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 9467d551-ceaa-4f25-b701-28ba40239a4a
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 2D Vector
+      m_Id: e2cca01f-db95-4905-99dd-9e501b8044c5
+      m_Path: 2DVector
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Move
+      m_Flags: 4
+    - m_Name: up
+      m_Id: 0046b493-9574-4118-8551-a7000a773cb8
+      m_Path: <Keyboard>/w
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Move
+      m_Flags: 8
+    - m_Name: down
+      m_Id: de442e23-c92e-4293-8d06-7b4cc70bbedf
+      m_Path: <Keyboard>/s
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Move
+      m_Flags: 8
+    - m_Name: left
+      m_Id: 27290a69-eaab-45ad-98de-29dc0943e17b
+      m_Path: <Keyboard>/a
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Move
+      m_Flags: 8
+    - m_Name: right
+      m_Id: 98f6e4ef-0cd8-4386-b09f-0cf1861c6eda
+      m_Path: <Keyboard>/d
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Move
+      m_Flags: 8
+    m_Flags: 0
 --- !u!20 &963194227
 Camera:
   m_ObjectHideFlags: 0
@@ -5330,8 +5392,8 @@ Camera:
   near clip plane: 0.01
   far clip plane: 0.02
   field of view: 60
-  orthographic: 0
-  orthographic size: 5
+  orthographic: 1
+  orthographic size: 60
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -5361,21 +5423,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &963194229
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 963194225}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1e2df0a8f3402b04e8c78907bea5241f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  xSensitivity: 4
-  ySensitivity: 4
-  moveSpeed: 100
 --- !u!114 &963194230
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5392,7 +5439,6 @@ MonoBehaviour:
   promptManager: {fileID: 1752046021}
   computeShader: {fileID: 7200000, guid: 2f3933c349923df4a83e341e68e17104, type: 3}
   cam: {fileID: 963194227}
-  firstPersonCamera: {fileID: 963194229}
   useScreenDimensions: 1
   textureDimensions: {x: 1920, y: 1080}
   freezeSimulation: 1
@@ -6985,7 +7031,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1333460338
 RectTransform:
   m_ObjectHideFlags: 0
@@ -8604,7 +8650,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1651145238
 RectTransform:
   m_ObjectHideFlags: 0
@@ -9669,7 +9715,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1909913234
 MonoBehaviour:
   m_ObjectHideFlags: 0

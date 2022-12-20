@@ -8,7 +8,7 @@ public class SimulationManager : MonoBehaviour
     [SerializeField] private PromptManager promptManager;
     [SerializeField] private ComputeShader computeShader;
     [SerializeField] private Camera cam;
-    [SerializeField] private FirstPersonCam firstPersonCamera;
+   // [SerializeField] private FirstPersonCam firstPersonCamera;
     [SerializeField] private bool useScreenDimensions;
     [SerializeField] private Vector2Int textureDimensions = Vector2Int.zero;
     [SerializeField] private bool freezeSimulation;
@@ -24,7 +24,7 @@ public class SimulationManager : MonoBehaviour
             freezeSimulation = value;
             if (FileHelper.IsReplaying)
             {
-                string direction = FileHelper.ReplayStep >= 0 ? "forward" : "reverse";
+                var direction = FileHelper.ReplayStep >= 0 ? "forward" : "reverse";
                 displayManager.SetMessage(freezeSimulation ? "Replay paused" : $"Replay replaying ({direction})");
             }
             else if (FileHelper.IsRecording)
@@ -79,10 +79,10 @@ public class SimulationManager : MonoBehaviour
             return;
         }
         
-        if (!lockCamera)
-        {
-            firstPersonCamera.ProcessCamera();
-        }
+        // if (!lockCamera)
+        // {
+        //     firstPersonCamera.ProcessCamera();
+        // }
         
         if (Input.GetKeyDown(KeyCode.F))
         {
