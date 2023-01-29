@@ -6,7 +6,7 @@ using UnityEngine;
 
 public class DisplayManager : MonoBehaviour
 {
-    [SerializeField] private SimulationManager simulationManager;
+    [SerializeField] private Simulation simulation;
     [SerializeField] private GameObject helpScreen;
     [SerializeField] private GameObject settingsMenu;
     [SerializeField] private GameObject mainCanvas;
@@ -87,7 +87,7 @@ public class DisplayManager : MonoBehaviour
     {
         try
         {
-            simulationManager.SetTimeStep(float.Parse(timeStepInput.text));
+            simulation.SetTimeStep(float.Parse(timeStepInput.text));
         }
         catch (Exception)
         {
@@ -117,7 +117,7 @@ public class DisplayManager : MonoBehaviour
     {
         try
         {
-            simulationManager.SetMinColorSpeed(float.Parse(minColorSpeedInput.text));
+            simulation.SetMinColorSpeed(float.Parse(minColorSpeedInput.text));
         }
         catch (Exception)
         {
@@ -128,7 +128,7 @@ public class DisplayManager : MonoBehaviour
     {
         try
         {
-            simulationManager.SetMaxColorSpeed(float.Parse(maxColorSpeedInput.text));
+            simulation.SetMaxColorSpeed(float.Parse(maxColorSpeedInput.text));
         }
         catch (Exception)
         {
@@ -140,14 +140,14 @@ public class DisplayManager : MonoBehaviour
         try
         {
             var numMasses = int.Parse(bodiesInput.text);
-            var mass = float.Parse(massInput.text) * 1000000f;
+            var mass = float.Parse(massInput.text) * 1000f;
             var initialVelocity = float.Parse(initialVelocityInput.text);
             var galaxyRadius = float.Parse(galaxyRadiusInput.text);
             var distributionRelation = (RadiusRelation) distributionDropdown.value;
             var velocityRelation = (RadiusRelation) velocityDropdown.value;
             var simulationState = new SimulationState(numMasses, mass, initialVelocity, galaxyRadius, distributionRelation,
                 velocityRelation);
-            simulationManager.SetSimulationState(simulationState, float.Parse(timeStepInput.text));
+            simulation.SetSimulationState(simulationState, float.Parse(timeStepInput.text));
             SetMessage("Regenerated galaxy");
         }
         catch (Exception)

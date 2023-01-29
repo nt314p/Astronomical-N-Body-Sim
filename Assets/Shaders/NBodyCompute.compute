@@ -8,12 +8,12 @@
 #pragma kernel ClearTexture
 #pragma kernel Upsample
 #pragma kernel Downsample
+#pragma kernel PostProcessTexture
 
 #define threadsX 512 // threads per group
 #define renderThreadLength 32
 #define renderThreads renderThreadLength * renderThreadLength
-#define G_u 0.000000667408 // universal gravitational constant
-#define particleRadius 6
+#define G_u 0.000667408 // universal gravitational constant (not accurate)
 
 struct PointMass
 {
@@ -35,6 +35,7 @@ RWTexture2D<float4> renderTexture; // :register(u3);
 //RWTexture2DArray<float4> mipmaps;
 Texture2D srcTexture;
 RWTexture2D<float4> destTexture;
+float4 textureDimensions;
 
 RWStructuredBuffer<float2> screenPositions;
 Texture2D<uint> cellData; // uint: upper 2 bytes of data holds the offset, lower 2 bytes holds the length
@@ -65,15 +66,15 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 
     for (uint i = 0; i < numMasses; i += threadsX)
     {
-        uint globalIndex = groupIndex + i;
+        const uint globalIndex = groupIndex + i;
         threadGroupPointMasses[groupIndex] = masses[globalIndex]; // each thread copies global data into thread memory
 
         GroupMemoryBarrierWithGroupSync(); // ensure that all of thread memory is populated before manipulating
 
         for (uint i2 = 0; i2 < threadsX; ++i2)
         {
-            PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
-            float3 deltaPos = p.position - pos;
+            const PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
+            const float3 deltaPos = p.position - pos;
             float invDist = rsqrt(dot(deltaPos, deltaPos)); // 1/sqrt(mag^2) = 1/mag
             invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
             accel += deltaPos * (p.mass * invDist * invDist * invDist);
@@ -108,20 +109,11 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 
     float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
 
-    float3 color = clamp(hueToRGB(frac(screenPos.x + screenPos.y * 1124.55)) + float3(0.4, 0.3, 0.6), 0, 1);
-    //hueToRGB(j); // * (100 / camDist); //float3(0.9, 0.9, 0.55);
-    float4 val = w > 0 && screenPos.x >= 0 && screenPos.y >= 0 ? float4(color, 1.0) : 0;
-    renderTexture[(uint2)screenPos] += val;
-    return;
-    GroupMemoryBarrierWithGroupSync();
-    renderTexture[(uint2)screenPos + uint2(1, 0)] += val * 0.4;
-    GroupMemoryBarrierWithGroupSync();
-    renderTexture[(uint2)screenPos + uint2(-1, 0)] += val * 0.4;
-    GroupMemoryBarrierWithGroupSync();
-    renderTexture[(uint2)screenPos + uint2(0, 1)] += val * 0.4;
-    GroupMemoryBarrierWithGroupSync();
-    renderTexture[(uint2)screenPos + uint2(0, -1)] += val * 0.4;
-    GroupMemoryBarrierWithGroupSync();
+    float hue = frac((id.x * 73856093 ^ 19349663 + 83492791) / 4294967295.0);
+
+    float3 color = clamp(hueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
+    float4 val = screenPos.x >= 0 && screenPos.y >= 0 && w > 0 ? float4(color, 1.0) : 0;
+    renderTexture[screenPos.xy] += val;
 }
 
 [numthreads(256, 1, 1)]
@@ -217,48 +209,72 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
     readout[id.x] = float2(Ekinetic, Epotential);
 }
 
+SamplerState linearClampSampler;
 
-// Downsample
-[numthreads(32, 8, 1)]
-void Downsample(uint3 id : SV_DispatchThreadID)
+inline float4 BilinearSample(Texture2D srcTexture, const uint3 c)
 {
     float4 sample = 0;
-    sample += srcTexture.Load(2 * id.xyz + int3(-2, -2, 0));
-    sample += srcTexture.Load(2 * id.xyz + int3(-2, 2, 0));
-    sample += srcTexture.Load(2 * id.xyz + int3(2, -2, 0));
-    sample += srcTexture.Load(2 * id.xyz + int3(2, 2, 0));
-    sample += srcTexture.Load(2 * id.xyz + int3(-2, -1, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(-2, 1, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(2, -1, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(2, 1, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(-1, 2, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(1, 2, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(-1, -2, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(1, -2, 0)) * 2;
-    sample += srcTexture.Load(2 * id.xyz + int3(-1, -1, 0)) * 4;
-    sample += srcTexture.Load(2 * id.xyz + int3(-1, 1, 0)) * 4;
-    sample += srcTexture.Load(2 * id.xyz + int3(1, -1, 0)) * 4;
-    sample += srcTexture.Load(2 * id.xyz + int3(1, 1, 0)) * 4;
+    sample += srcTexture.Load(c + int3(0, 0, 0));
+    sample += srcTexture.Load(c + int3(0, 1, 0));
+    sample += srcTexture.Load(c + int3(1, 0, 0));
+    sample += srcTexture.Load(c + int3(1, 1, 0));
+    return sample * 0.25;
+}
+
+// Downsample (iterate over smaller texture)
+[numthreads(32, 8, 1)]
+void Downsample(uint3 id : SV_DispatchThreadID) // TODO: https://youtu.be/ml-5OGZC7vE?t=517 Karis average?
+{
+    float4 sample = 0;
+    const int3 srcTexCoord = 2 * id.xyz;
+
+    // weight 4
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(0, 0, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(-1, -1, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(-1, 1, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(1, 1, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(1, -1, 0));
+    sample *= 2;
+
+    // weight 2
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(-2, 0, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(0, -2, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(0, 2, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(2, 0, 0));
+    sample *= 2;
+
+    // weight 1
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(-2, -2, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(-2, 2, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(2, -2, 0));
+    sample += BilinearSample(srcTexture, srcTexCoord + int3(2, 2, 0));
+
     destTexture[id.xy] = sample * 0.03125;
 }
 
 
-// Upsample
+// Upsample (iterate over larger texture)
 [numthreads(32, 8, 1)]
 void Upsample(uint3 id: SV_DispatchThreadID)
 {
     float4 sample = 0;
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(-1, -1, 0));
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(0, -1, 0)) * 2;
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(1, -1, 0));
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(-1, 0, 0)) * 2;
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(0, 0, 0)) * 4;
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(1, 0, 0)) * 2;
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(-1, 1, 0));
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(0, 1, 0)) * 2;
-    sample += srcTexture.Load(int3(id.xy, 0) / 2 + int3(1, 1, 0));
+    // if id.xy is even, the weighting is 0.375
 
-    destTexture[id.xy] += sample * 0.0625;
+    const int3 coord = id / 2;
+    const float2 highFactor = (id.xy & 1) / 4.0 + 0.875; // weighting for pixels to the top and right
+    const float2 lowFactor = 2 - highFactor; // weighting for pixels to the bottom and left
+
+    sample += srcTexture.Load(coord + int3(-1, -1, 0)) * lowFactor.x * lowFactor.x;
+    sample += srcTexture.Load(coord + int3(0, -1, 0)) * 2 * lowFactor.y;
+    sample += srcTexture.Load(coord + int3(1, -1, 0)) * highFactor.x * lowFactor.y;
+    sample += srcTexture.Load(coord + int3(-1, 0, 0)) * 2 * lowFactor.x;
+    sample += srcTexture.Load(coord + int3(0, 0, 0)) * 4;
+    sample += srcTexture.Load(coord + int3(1, 0, 0)) * 2 * highFactor.x;
+    sample += srcTexture.Load(coord + int3(-1, 1, 0)) * lowFactor.x * highFactor.y;
+    sample += srcTexture.Load(coord + int3(0, 1, 0)) * 2 * highFactor.y;
+    sample += srcTexture.Load(coord + int3(1, 1, 0)) * highFactor.x * highFactor.y;
+
+    destTexture[id.xy] += sample * 0.0625 * 1.3;
 }
 
 // Fade kernel, subtracts color from all pixels
@@ -268,6 +284,14 @@ void ProcessTexture(uint3 id : SV_DispatchThreadID)
     float4 originalValue = renderTexture[id.xy];
     float4 fadedValue = max(0, originalValue - 0.05);
     renderTexture[id.xy] = fadedValue;
+}
+
+// PostProcessTexture
+[numthreads(32, 8, 1)]
+void PostProcessTexture(uint3 id : SV_DispatchThreadID)
+{
+    float3 val = renderTexture.Load(id.xy);
+    renderTexture[id.xy] = float4(pow(val, 0.8), 1);
 }
 
 // Clear texture kernel

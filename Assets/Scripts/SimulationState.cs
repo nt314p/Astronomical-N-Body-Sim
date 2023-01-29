@@ -43,7 +43,7 @@ public class SimulationState
 
             masses[index] = new PointMassState
             {
-                Mass = 1000000000,
+                Mass = 1000,
                 Position = pos,
                 Velocity = vel,
                 Acceleration = Vector3.zero

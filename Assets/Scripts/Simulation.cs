@@ -2,13 +2,13 @@ using System;
 using System.IO;
 using UnityEngine;
 
-public class SimulationManager : MonoBehaviour
+public class Simulation : MonoBehaviour
 {
     [SerializeField] private DisplayManager displayManager;
     [SerializeField] private PromptManager promptManager;
     [SerializeField] private ComputeShader computeShader;
-    [SerializeField] private Camera cam;
-   // [SerializeField] private FirstPersonCam firstPersonCamera;
+    [SerializeField] private Camera cam; 
+    // [SerializeField] private FirstPersonCam firstPersonCamera;
     [SerializeField] private bool useScreenDimensions;
     [SerializeField] private Vector2Int textureDimensions = Vector2Int.zero;
     [SerializeField] private bool freezeSimulation;

@@ -25,6 +25,8 @@ public class AstronomicalRenderer
     private Texture2D cellDataTexture;
     private Vector2Int cellDataDimensions;
 
+    private const int BloomMipDepth = 6;
+
     private readonly int numMasses;
     private readonly int processTextureId;
     private readonly int renderMassesId;
@@ -35,6 +37,7 @@ public class AstronomicalRenderer
     private readonly int maxColorSpeedId;
     private readonly int upsampleId;
     private readonly int downsampleId;
+    private readonly int postProcessTextureId;
 
     public AstronomicalRenderer(AstronomicalSimulator astronomicalSimulator, ComputeShader computeShader, Camera camera)
     {
@@ -51,6 +54,7 @@ public class AstronomicalRenderer
         downsampleId = computeShader.FindKernel("Downsample");
         minColorSpeedId = Shader.PropertyToID("minColorSpeed");
         maxColorSpeedId = Shader.PropertyToID("maxColorSpeed");
+        postProcessTextureId = computeShader.FindKernel("PostProcessTexture");
 
         numMasses = astronomicalSimulator.NumMasses;
 
@@ -114,10 +118,11 @@ public class AstronomicalRenderer
 
         if (mipmaps == null)
         {
-            mipmaps = new RenderTexture[7];
+            mipmaps = new RenderTexture[BloomMipDepth];
             var width = Screen.width;
             var height = Screen.height;
-            for (var i = 0; i < mipmaps.Length; i++)
+            
+            for (var i = 0; i < BloomMipDepth; i++)
             {
                 var rt = new RenderTexture(width, height, 16);
                 rt.enableRandomWrite = true;
@@ -125,30 +130,21 @@ public class AstronomicalRenderer
                 mipmaps[i] = rt;
                 width /= 2;
                 height /= 2;
-
-                //computeShader.set
-                //computeShader.SetTexture(downsampleId, "mipmaps", rt, i);
             }
         }
 
         if (renderTexture == null || !useFadeProcessing)
         {
-            computeShader.Dispatch(clearTextureId, renderTexture.width / 32 + 1, renderTexture.height / 8 + 1, 1);
-            //GL.Clear(true, true, Color.black);
-            // if (renderTexture != null)
-            //     renderTexture.Release();
-
-            //renderTexture = new RenderTexture(dimensions.x, dimensions.y, 0);
-
-            // renderTexture.enableRandomWrite = true;
-            // renderTexture.Create();
-            // computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
-            // computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
+            computeShader.Dispatch(clearTextureId, 
+                Mathf.CeilToInt(renderTexture.width / 32f), 
+                Mathf.CeilToInt(renderTexture.height / 8f), 1);
         }
 
         if (useFadeProcessing)
         {
-            computeShader.Dispatch(processTextureId, renderTexture.width / 32 + 1, renderTexture.height / 8 + 1, 1);
+            computeShader.Dispatch(processTextureId, 
+                Mathf.CeilToInt(renderTexture.width / 32f),
+                Mathf.CeilToInt(renderTexture.height / 8f), 1);
         }
 
         var viewToScreen = Matrix4x4.Scale(new Vector3(renderTexture.width, renderTexture.height, 1));
@@ -167,28 +163,41 @@ public class AstronomicalRenderer
         computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
 
         mipmaps[0] = renderTexture;
-        for (var i = 1; i < mipmaps.Length; i++)
+        for (var i = 1; i < BloomMipDepth; i++)
         {
+            var srcTexture = mipmaps[i - 1];
             var destTexture = mipmaps[i];
 
-            computeShader.SetTexture(downsampleId, "srcTexture", mipmaps[i - 1]);
+            computeShader.SetTexture(downsampleId, "srcTexture", srcTexture);
             computeShader.SetTexture(downsampleId, "destTexture", destTexture);
+            computeShader.SetVector("textureDimensions", GetInverseTextureDimensions(srcTexture, destTexture));
 
-            computeShader.Dispatch(downsampleId, destTexture.width / 32 + 1, destTexture.height / 8 + 1, 1);
+            computeShader.Dispatch(downsampleId, 
+                Mathf.CeilToInt(destTexture.width / 32f),
+                Mathf.CeilToInt(destTexture.height / 8f), 1);
         }
 
-        for (var i = mipmaps.Length - 1; i > 0; i--)
+        for (var i = BloomMipDepth - 1; i > 0; i--)
         {
+            var srcTexture = mipmaps[i];
             var destTexture = mipmaps[i - 1];
-
-            computeShader.SetTexture(upsampleId, "srcTexture", mipmaps[i]);
+            
+            computeShader.SetTexture(upsampleId, "srcTexture", srcTexture);
             computeShader.SetTexture(upsampleId, "destTexture", destTexture);
-
-            computeShader.Dispatch(upsampleId, destTexture.width / 32 + 1, destTexture.height / 8 + 1, 1);
+            computeShader.SetVector("textureDimensions",
+                GetInverseTextureDimensions(srcTexture, destTexture));
+        
+            computeShader.Dispatch(upsampleId, 
+                Mathf.CeilToInt(destTexture.width / 32f),
+                Mathf.CeilToInt(destTexture.height / 8f), 1);
         }
 
-        var sel = (int)Time.time / 2;
-        sel %= 6;
+        renderTexture = mipmaps[0];
+        computeShader.SetTexture(postProcessTextureId, "renderTexture", renderTexture);
+        computeShader.Dispatch(postProcessTextureId, 
+            Mathf.CeilToInt(renderTexture.width / 32f), 
+            Mathf.CeilToInt(renderTexture.height / 8f), 1);
+        
         return mipmaps[0];
     }
 
@@ -246,6 +255,12 @@ public class AstronomicalRenderer
 
         cellDataTexture.SetPixelData(cellDataTextureBuffer, 0);
         cellDataTexture.Apply(false);
+    }
+
+    private static Vector4 GetInverseTextureDimensions(Texture rtA, Texture rtB)
+    {
+        return new Vector4(1.0f / (rtA.width - 1), 1.0f / (rtA.height - 1), 1.0f / (rtB.width - 1),
+            1.0f / (rtB.height - 1));
     }
 
     public RenderTexture GetRenderTexture()
