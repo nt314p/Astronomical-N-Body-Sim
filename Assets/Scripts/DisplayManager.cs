@@ -85,12 +85,9 @@ public class DisplayManager : MonoBehaviour
 
     public void OnTimeStepEndEdit()
     {
-        try
+        if (float.TryParse(timeStepInput.text, out var val))
         {
-            simulation.SetTimeStep(float.Parse(timeStepInput.text));
-        }
-        catch (Exception)
-        {
+            simulation.SetTimeStep(val);
         }
     }
 
@@ -101,37 +98,26 @@ public class DisplayManager : MonoBehaviour
     
     public void OnBodiesEndEdit()
     {
-        try
-        {
-            var bodies = Mathf.RoundToInt(int.Parse(bodiesInput.text) / 512.0f) * 512;
-            bodies = Mathf.Max(bodies, 512);
-            bodies = Mathf.Min(bodies, 65536);
-            bodiesInput.text = bodies.ToString();
-        }
-        catch (Exception)
-        {
-        }
+        if (!int.TryParse(bodiesInput.text, out var bodies)) return;
+        bodies = Mathf.RoundToInt((bodies / 512.0f) * 512);
+        bodies = Mathf.Max(bodies, 512);
+        bodies = Mathf.Min(bodies, 65536);
+        bodiesInput.text = bodies.ToString();
     }
 
     public void OnMinColorSpeedUpdate()
     {
-        try
+        if(float.TryParse(minColorSpeedInput.text, out var val))
         {
-            simulation.SetMinColorSpeed(float.Parse(minColorSpeedInput.text));
-        }
-        catch (Exception)
-        {
+            simulation.SetMinColorSpeed(val);
         }
     }
     
     public void OnMaxColorSpeedUpdate()
     {
-        try
+        if (float.TryParse(maxColorSpeedInput.text, out var val))
         {
-            simulation.SetMaxColorSpeed(float.Parse(maxColorSpeedInput.text));
-        }
-        catch (Exception)
-        {
+            simulation.SetMaxColorSpeed(val);
         }
     }
 

@@ -7,8 +7,8 @@ public class Simulation : MonoBehaviour
     [SerializeField] private DisplayManager displayManager;
     [SerializeField] private PromptManager promptManager;
     [SerializeField] private ComputeShader computeShader;
-    [SerializeField] private Camera cam; 
-    // [SerializeField] private FirstPersonCam firstPersonCamera;
+    [SerializeField] private Camera cam;
+    public int Passes = 10;
     [SerializeField] private bool useScreenDimensions;
     [SerializeField] private Vector2Int textureDimensions = Vector2Int.zero;
     [SerializeField] private bool freezeSimulation;
@@ -64,6 +64,8 @@ public class Simulation : MonoBehaviour
 
     private void Update()
     {
+        astronomicalRenderer.Passes = Passes;
+        
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             promptManager.ShowPrompt("Really quit?", "No", "Yes", QuitPromptCallback, false);

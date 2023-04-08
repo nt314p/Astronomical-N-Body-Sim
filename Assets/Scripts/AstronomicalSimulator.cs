@@ -18,7 +18,7 @@ public class AstronomicalSimulator
     private const int SizeOfPointMass = 16;
     private const int SizeOfMotion = 24;
     private const int ComputeThreads = 512;
-    private ComputeShader computeShader;
+    private readonly ComputeShader computeShader;
 
     public int NumMasses { get; private set; }
     public ComputeBuffer MassesBuffer { get; private set; }

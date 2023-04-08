@@ -1,11 +1,4 @@
-﻿using System;
-using UnityEngine;
-
-public struct GridCellData
-{
-    public ushort Offset;
-    public ushort Length;
-}
+﻿using UnityEngine;
 
 public class AstronomicalRenderer
 {
@@ -16,23 +9,14 @@ public class AstronomicalRenderer
 
     private readonly AstronomicalSimulator astronomicalSimulator;
 
-    private ComputeBuffer screenPositionsComputeBuffer;
-    private Vector2[] screenPositionsBuffer;
-    private Vector2[] screenPositionsTempBuffer;
+    private const int BloomMipDepth = 10;
 
-    private GridCellData[,] cellData;
-    private uint[] cellDataTextureBuffer;
-    private Texture2D cellDataTexture;
-    private Vector2Int cellDataDimensions;
-
-    private const int BloomMipDepth = 6;
+    public int Passes = 10;
 
     private readonly int numMasses;
     private readonly int processTextureId;
     private readonly int renderMassesId;
     private readonly int clearTextureId;
-    private readonly int computePositionsId;
-    private readonly int renderStarsId;
     private readonly int minColorSpeedId;
     private readonly int maxColorSpeedId;
     private readonly int upsampleId;
@@ -48,8 +32,6 @@ public class AstronomicalRenderer
         processTextureId = computeShader.FindKernel("ProcessTexture");
         renderMassesId = computeShader.FindKernel("RenderMasses");
         clearTextureId = computeShader.FindKernel("ClearTexture");
-        computePositionsId = computeShader.FindKernel("ComputePositions");
-        renderStarsId = computeShader.FindKernel("RenderStars");
         upsampleId = computeShader.FindKernel("Upsample");
         downsampleId = computeShader.FindKernel("Downsample");
         minColorSpeedId = Shader.PropertyToID("minColorSpeed");
@@ -60,15 +42,6 @@ public class AstronomicalRenderer
 
         computeShader.SetBuffer(renderMassesId, "masses", astronomicalSimulator.MassesBuffer);
         computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
-
-        computeShader.SetBuffer(computePositionsId, "masses", astronomicalSimulator.MassesBuffer);
-
-        screenPositionsComputeBuffer = new ComputeBuffer(numMasses, 8);
-        screenPositionsBuffer = new Vector2[numMasses];
-        screenPositionsTempBuffer = new Vector2[numMasses];
-        screenPositionsComputeBuffer.SetData(screenPositionsBuffer);
-        computeShader.SetBuffer(computePositionsId, "screenPositions", screenPositionsComputeBuffer);
-        computeShader.SetBuffer(renderStarsId, "screenPositions", screenPositionsComputeBuffer);
     }
 
     public void SetBuffers()
@@ -79,8 +52,7 @@ public class AstronomicalRenderer
 
     public void ReleaseBuffers()
     {
-        screenPositionsComputeBuffer?.Release();
-        screenPositionsComputeBuffer = null;
+
     }
 
     public void SetMinColorSpeed(float minSpeed)
@@ -100,20 +72,10 @@ public class AstronomicalRenderer
             renderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
-
-            cellDataDimensions.x = renderTexture.width / 32 + 1;
-            cellDataDimensions.y = renderTexture.height / 32 + 1;
-
-            cellData = new GridCellData[cellDataDimensions.x, cellDataDimensions.y];
-            cellDataTextureBuffer = new uint[cellData.Length];
-
-            cellDataTexture = new Texture2D(cellDataDimensions.x, cellDataDimensions.y, TextureFormat.RFloat, false);
-
+            
             computeShader.SetTexture(clearTextureId, "renderTexture", renderTexture);
             computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
             computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
-            computeShader.SetTexture(renderStarsId, "renderTexture", renderTexture);
-            computeShader.SetTexture(renderStarsId, "cellData", cellDataTexture);
         }
 
         if (mipmaps == null)
@@ -154,16 +116,10 @@ public class AstronomicalRenderer
         // World to screen matrix derived by Wokarol
 
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix);
-
-        //computeShader.Dispatch(computePositionsId, numMasses / 256, 1, 1);
-        //SortScreenPositions();
-        //screenPositionsComputeBuffer.SetData(screenPositionsBuffer);
-        //computeShader.Dispatch(renderStarsId, cellDataDimensions.x, cellDataDimensions.y, 1);
-
         computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
 
         mipmaps[0] = renderTexture;
-        for (var i = 1; i < BloomMipDepth; i++)
+        for (var i = 1; i < Passes; i++) // Downsample
         {
             var srcTexture = mipmaps[i - 1];
             var destTexture = mipmaps[i];
@@ -177,7 +133,7 @@ public class AstronomicalRenderer
                 Mathf.CeilToInt(destTexture.height / 8f), 1);
         }
 
-        for (var i = BloomMipDepth - 1; i > 0; i--)
+        for (var i = Passes - 1; i > 0; i--) // Upsample
         {
             var srcTexture = mipmaps[i];
             var destTexture = mipmaps[i - 1];
@@ -199,62 +155,6 @@ public class AstronomicalRenderer
             Mathf.CeilToInt(renderTexture.height / 8f), 1);
         
         return mipmaps[0];
-    }
-
-    private void SortScreenPositions()
-    {
-        Array.Clear(cellData, 0, cellData.Length);
-        Array.Clear(cellDataTextureBuffer, 0, cellDataTextureBuffer.Length);
-        screenPositionsComputeBuffer.GetData(screenPositionsBuffer);
-
-        foreach (var position in screenPositionsBuffer)
-        {
-            var x = (int)position.x / 32;
-            var y = (int)position.y / 32;
-            if (x < 0 || y < 0) continue;
-            if (x >= cellDataDimensions.x || y >= cellDataDimensions.y) continue;
-            cellData[x, y].Length++;
-        }
-
-        ushort offset = 0;
-
-        for (var y = 0; y < cellData.GetLength(1); y++)
-        {
-            for (var x = 0; x < cellData.GetLength(0); x++)
-            {
-                cellData[x, y].Offset = offset;
-                offset += cellData[x, y].Length;
-            }
-        }
-
-        foreach (var position in screenPositionsBuffer)
-        {
-            var x = (int)position.x / 32;
-            var y = (int)position.y / 32;
-            if (x < 0 || y < 0) continue;
-            if (x >= cellDataDimensions.x || y >= cellDataDimensions.y) continue;
-            var index = cellData[x, y].Offset;
-            cellData[x, y].Offset = (ushort)(index + 1);
-
-            screenPositionsTempBuffer[index] = position;
-        }
-
-        var temp = screenPositionsBuffer;
-        screenPositionsBuffer = screenPositionsTempBuffer;
-        screenPositionsTempBuffer = temp;
-
-        for (var y = 0; y < cellData.GetLength(1); y++)
-        {
-            for (var x = 0; x < cellData.GetLength(0); x++)
-            {
-                var cell = cellData[x, y];
-                var val = (uint)(((cell.Offset - cell.Length) << 16) | cell.Length);
-                cellDataTextureBuffer[x + y * cellData.GetLength(0)] = val;
-            }
-        }
-
-        cellDataTexture.SetPixelData(cellDataTextureBuffer, 0);
-        cellDataTexture.Apply(false);
     }
 
     private static Vector4 GetInverseTextureDimensions(Texture rtA, Texture rtB)

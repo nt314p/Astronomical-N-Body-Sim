@@ -7,7 +7,7 @@ public class OrbitCamera : MonoBehaviour
     private Vector3 target;
     private float yaw;
     private float pitch = 30;
-    private float radius = 1000f;
+    private const float Radius = 1000f;
     private const float MaxPitchAngle = 89f;
 
     [SerializeField] private InputAction moveAction;
@@ -48,7 +48,7 @@ public class OrbitCamera : MonoBehaviour
 
     private void ProcessOrbit()
     {
-        var pos = Vector3.back * radius;
+        var pos = Vector3.back * Radius;
         pos = Quaternion.AngleAxis(pitch, Vector3.right) * pos;
         pos = Quaternion.AngleAxis(yaw, Vector3.up) * pos;
         cam.transform.position = pos + target;

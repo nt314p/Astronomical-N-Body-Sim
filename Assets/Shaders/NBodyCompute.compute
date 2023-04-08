@@ -3,8 +3,6 @@
 #pragma kernel ComputeTotalEnergy
 #pragma kernel ProcessTexture
 #pragma kernel RenderMasses
-#pragma kernel ComputePositions
-#pragma kernel RenderStars
 #pragma kernel ClearTexture
 #pragma kernel Upsample
 #pragma kernel Downsample
@@ -32,7 +30,6 @@ RWStructuredBuffer<Motion> motions; // : register(u1);
 RWStructuredBuffer<float2> readout; // : register(u2);
 RWTexture2D<float4> renderTexture; // :register(u3);
 
-//RWTexture2DArray<float4> mipmaps;
 Texture2D srcTexture;
 RWTexture2D<float4> destTexture;
 float4 textureDimensions;
@@ -107,82 +104,13 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
     float w = screenPos.w;
     screenPos /= w;
 
-    float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
+    //float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
 
     float hue = frac((id.x * 73856093 ^ 19349663 + 83492791) / 4294967295.0);
 
     float3 color = clamp(hueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
     float4 val = screenPos.x >= 0 && screenPos.y >= 0 && w > 0 ? float4(color, 1.0) : 0;
     renderTexture[screenPos.xy] += val;
-}
-
-[numthreads(256, 1, 1)]
-void ComputePositions(uint3 id: SV_DispatchThreadID)
-{
-    float3 pos = masses[id.x].position;
-    float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
-    float w = screenPos.w;
-    screenPositions[id.x] = screenPos / w / step(0, w); // divide by 0 if w is negative, results in infinity
-}
-
-[numthreads(renderThreadLength, renderThreadLength, 1)]
-void RenderStars(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID)
-{
-    float3 sum = 0;
-    const float2 pos = id.xy;
-
-    [loop]
-    for (int i = -1; i <= 1; i++)
-    {
-        int3 centerIndex = groupId + int3(0, i, 0);
-        uint cell = cellData.Load(centerIndex);
-        uint length = cell & 0xFFFF; // the length across all three cells in a row
-        uint offset = cell >> 16; // the offset in the global screenPositions array
-
-        cell = cellData.Load(centerIndex + int3(-1, 0, 0)); // load cell to the left
-        uint dataLength = cell & 0xFFFF;
-        length += dataLength;
-        offset -= dataLength;
-
-        cell = cellData.Load(centerIndex + int3(1, 0, 0)); // cell to the right
-        length += cell & 0xFFFF;
-
-        for (uint i2 = 0; i2 < length; i2++)
-        {
-            float2 starPos = screenPositions[offset + i2];
-            float2 diff = starPos - pos;
-            float sqrMag = dot(diff, diff);
-            float smoothingStar = 1 - smoothstep(700, 1024, sqrMag);
-            float smoothingFlare = 1 - smoothstep(300, 350, sqrMag);
-            float3 color = clamp(hueToRGB(frac(starPos.x + starPos.y * 1124.55)) + float3(0.4, 0.3, 0.6), 0, 1);
-            sum += color * smoothingStar / sqrMag;
-            //sum += color * smoothingFlare * max(0, 1 - abs(diff.x * diff.y / 4.0f));
-        }
-    }
-
-    renderTexture[id.xy] = 2 * float4(sum * float3(0.4, 0.2, 0.5), 1);
-    //renderTexture[pos] = 1000.0f * sum / numMasses;
-    //if (sum < 0.00001f)
-    //	renderTexture[id.xy] = float4(1, 0, 1, 1);
-
-    /*
-    for (uint i = 0; i < numMasses; i += renderThreads)
-    {
-        uint globalIndex = groupIndex + i;
-        threadGroupScreenPositions[groupIndex] = screenPositions[globalIndex]; // each thread copies global data into thread memory
-
-        GroupMemoryBarrierWithGroupSync();
-        
-        for (uint i2 = 0; i2 < min(numMasses - i, renderThreads); i2++)
-        {
-            float2 diff = threadGroupScreenPositions[i2] - pos;
-            sum += 1.0f / dot(diff, diff);
-        }
-
-        GroupMemoryBarrierWithGroupSync();
-    }*/
-
-    //if (id.x % renderThreadLength == 0 || id.y % renderThreadLength == 0) renderTexture[id.xy] = 1;
 }
 
 [numthreads(256, 1, 1)]
@@ -208,8 +136,6 @@ void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 
     readout[id.x] = float2(Ekinetic, Epotential);
 }
-
-SamplerState linearClampSampler;
 
 inline float4 BilinearSample(Texture2D srcTexture, const uint3 c)
 {
@@ -261,9 +187,12 @@ void Upsample(uint3 id: SV_DispatchThreadID)
     // if id.xy is even, the weighting is 0.375
 
     const int3 coord = id / 2;
-    const float2 highFactor = (id.xy & 1) / 4.0 + 0.875; // weighting for pixels to the top and right
-    const float2 lowFactor = 2 - highFactor; // weighting for pixels to the bottom and left
+    float2 highFactor = (id.xy & 1) / 4.0 + 0.875; // weighting for pixels to the top and right
+    float2 lowFactor = 2 - highFactor; // weighting for pixels to the bottom and left
 
+    highFactor = float2(1.0, 1.0);
+    lowFactor = float2(1.0, 1.0);
+    
     sample += srcTexture.Load(coord + int3(-1, -1, 0)) * lowFactor.x * lowFactor.x;
     sample += srcTexture.Load(coord + int3(0, -1, 0)) * 2 * lowFactor.y;
     sample += srcTexture.Load(coord + int3(1, -1, 0)) * highFactor.x * lowFactor.y;
@@ -274,16 +203,16 @@ void Upsample(uint3 id: SV_DispatchThreadID)
     sample += srcTexture.Load(coord + int3(0, 1, 0)) * 2 * highFactor.y;
     sample += srcTexture.Load(coord + int3(1, 1, 0)) * highFactor.x * highFactor.y;
 
-    destTexture[id.xy] += sample * 0.0625 * 1.3;
+    float4 tex = destTexture[id.xy];
+    tex += sample * 0.0625 * 1.1;    
+    destTexture[id.xy] = tex;
 }
 
 // Fade kernel, subtracts color from all pixels
 [numthreads(32, 8, 1)]
 void ProcessTexture(uint3 id : SV_DispatchThreadID)
 {
-    float4 originalValue = renderTexture[id.xy];
-    float4 fadedValue = max(0, originalValue - 0.05);
-    renderTexture[id.xy] = fadedValue;
+    renderTexture[id.xy] = max(0, renderTexture[id.xy] - 0.05);
 }
 
 // PostProcessTexture
@@ -291,7 +220,7 @@ void ProcessTexture(uint3 id : SV_DispatchThreadID)
 void PostProcessTexture(uint3 id : SV_DispatchThreadID)
 {
     float3 val = renderTexture.Load(id.xy);
-    renderTexture[id.xy] = float4(pow(val, 0.8), 1);
+    renderTexture[id.xy] = float4(pow(val, 0.7), 1);
 }
 
 // Clear texture kernel
