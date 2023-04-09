@@ -20,13 +20,10 @@ public static class FileHelper
     public static void InitializeDirectories()
     {
         if (!Directory.Exists("Screenshots"))
-        {
             Directory.CreateDirectory("Screenshots");
-        }
+        
         if (!Directory.Exists("Saves"))
-        {
             Directory.CreateDirectory("Saves");
-        }
     }
     
     public static void SaveScreenshot(Texture2D texture)
@@ -39,11 +36,10 @@ public static class FileHelper
         foreach (var file in files)
         {
             var numStr = file.Substring(22, file.Length - 26);
-            if (int.TryParse(numStr, out var screenshotNum))
-            {
-                if (screenshotNum > maxScreenshotNum)
-                    maxScreenshotNum = screenshotNum;
-            }
+            if (!int.TryParse(numStr, out var screenshotNum)) continue;
+            
+            if (screenshotNum > maxScreenshotNum)
+                maxScreenshotNum = screenshotNum;
         }
 
         maxScreenshotNum++;
@@ -86,29 +82,23 @@ public static class FileHelper
         {
             throw new InvalidOperationException("Replay has not been started");
         }
-
+        
+        // Read in strides of 16: 12 bytes position, 4 bytes speed
         var stateSize = replayingNumMasses * SizeOfStreamPointMassState;
         replayReader.Read(StreamingBuffer, 0, stateSize);
-            
-        // StreamingBuffer: 12 bytes position, 4 bytes speed
-        // PointMassesBuffer: 4 bytes mass, 12 bytes position, 12 bytes velocity, 12 bytes acceleration
         
-        // SteamingMasses.mass, StreamingBuffer.position, [StreamingBuffer.speed, 0, 0], [0, 0, 0]
-        
+        // Populate simulation state buffer of stride 40: 4 bytes mass, 12 bytes per position, velocity, acceleration
         for (var index = 0; index < replayingNumMasses; index++)
         {
             var offset = index * SizeOfPointMassState;
             var massOffset = index * sizeof(float);
             var positionVelocityOffset = index * SizeOfStreamPointMassState;
-            for (var massIndex = 0; massIndex < sizeof(float); massIndex++) // Mass
-            {
-                PointMassesBuffer[offset + massIndex] = StreamingMasses[massOffset + massIndex];
-            }
-
+            
+            FloatByteBufferCopy(StreamingMasses, massOffset, PointMassesBuffer, offset); // Copy mass
             offset += sizeof(float);
             
             for (var positionVelocityIndex = 0; // Position and velocity.x
-                positionVelocityIndex < SizeOfStreamPointMassState;
+                positionVelocityIndex < SizeOfStreamPointMassState; // TODO: I swear this is bugged
                 positionVelocityIndex++)
             {
                 PointMassesBuffer[offset + positionVelocityIndex] =
@@ -116,7 +106,7 @@ public static class FileHelper
             }
 
             offset += SizeOfStreamPointMassState;
-            var numZeros = SizeOfPointMassState - SizeOfStreamPointMassState - sizeof(float);
+            const int numZeros = SizeOfPointMassState - SizeOfStreamPointMassState - sizeof(float);
 
             for (var zeroIndex = 0; zeroIndex < numZeros; zeroIndex++) // Velocity.yz, Acceleration
             {
@@ -172,19 +162,18 @@ public static class FileHelper
         var path = $"Saves/{fileName}.simstream";
         recordingWriter = new BinaryWriter(File.Open(path, FileMode.Create));
         currentAstronomicalSimulator = astronomicalSimulator;
-        recordingWriter.Write(currentAstronomicalSimulator.NumMasses);
+        recordingWriter.Write(currentAstronomicalSimulator.NumMasses); // Write number of masses (4 bytes)
         
         // recordingWriter.Write(currentAstronomicalSimulator.); // write timestep
 
         astronomicalSimulator.GetSimulationStateNonAllocBytes(PointMassesBuffer);
-        for (var index = 0; index < currentAstronomicalSimulator.NumMasses; index++)
+        
+        // Write mass values. The mass values are assumed to not change over the simulation.
+        for (var index = 0; index < currentAstronomicalSimulator.NumMasses; index++) 
         {
             var offset = index * SizeOfPointMassState;
             var streamingOffset = index * sizeof(float);
-            for (var massIndex = 0; massIndex < sizeof(float); massIndex++)
-            {
-                StreamingMasses[streamingOffset + massIndex] = PointMassesBuffer[offset + massIndex];
-            }
+            FloatByteBufferCopy(PointMassesBuffer, offset, StreamingMasses, streamingOffset);
         }
 
         recordingWriter.Write(StreamingMasses, 0, currentAstronomicalSimulator.NumMasses * sizeof(float));
@@ -205,6 +194,7 @@ public static class FileHelper
         {
             var offset = index * SizeOfPointMassState + sizeof(float); // Offset a single float (mass value) from start
             var streamOffset = index * SizeOfStreamPointMassState;
+            
             for (var positionIndex = 0; positionIndex < 3 * sizeof(float); positionIndex++) // Position
             {
                 StreamingBuffer[streamOffset + positionIndex] = PointMassesBuffer[offset + positionIndex];
@@ -220,10 +210,7 @@ public static class FileHelper
             streamOffset += 3 * sizeof(float);
             
             var velocityBytes = BitConverter.GetBytes(Mathf.Sqrt(squareMagnitudeVelocity));
-            for (var velocityIndex = 0; velocityIndex < sizeof(float); velocityIndex++) // Velocity
-            {
-                StreamingBuffer[streamOffset + velocityIndex] = velocityBytes[velocityIndex];
-            }
+            FloatByteBufferCopy(velocityBytes, 0, StreamingBuffer, streamOffset); // Velocity
         }
         recordingWriter.Write(StreamingBuffer, 0, currentAstronomicalSimulator.NumMasses * SizeOfStreamPointMassState);
     }
@@ -265,5 +252,14 @@ public static class FileHelper
         
         using var binaryWriter = new BinaryWriter(File.Open(path, FileMode.Create));
         binaryWriter.Write(PointMassesBuffer, 0, numMasses * SizeOfPointMassState);
+    }
+    
+    // Copies four bytes (a float) from the source buffer at the source offset to the destination buffer at the destination offset
+    private static void FloatByteBufferCopy(byte[] src, int srcOffset, byte[] dest, int destOffset)
+    {
+        dest[destOffset] = src[srcOffset];
+        dest[destOffset + 1] = src[srcOffset + 1];
+        dest[destOffset + 2] = src[srcOffset + 2];
+        dest[destOffset + 3] = src[srcOffset + 3];
     }
 }

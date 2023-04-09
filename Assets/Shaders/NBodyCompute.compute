@@ -1,7 +1,7 @@
 #pragma enable_d3d11_debug_symbols
 #pragma kernel StepSimulation
 #pragma kernel ComputeTotalEnergy
-#pragma kernel ProcessTexture
+#pragma kernel FadeTexture
 #pragma kernel RenderMasses
 #pragma kernel ClearTexture
 #pragma kernel Upsample
@@ -34,9 +34,6 @@ Texture2D srcTexture;
 RWTexture2D<float4> destTexture;
 float4 textureDimensions;
 
-RWStructuredBuffer<float2> screenPositions;
-Texture2D<uint> cellData; // uint: upper 2 bytes of data holds the offset, lower 2 bytes holds the length
-
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
 groupshared float2 threadGroupScreenPositions[renderThreads];
 
@@ -45,7 +42,7 @@ float deltaTime;
 float halfDeltaTime;
 float4x4 worldToScreenMatrix;
 
-inline float3 hueToRGB(float h)
+inline float3 HueToRGB(float h)
 {
     float r = abs(h * 6 - 3) - 1;
     float g = 2 - abs(h * 6 - 2);
@@ -108,7 +105,7 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 
     float hue = frac((id.x * 73856093 ^ 19349663 + 83492791) / 4294967295.0);
 
-    float3 color = clamp(hueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
+    float3 color = clamp(HueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
     float4 val = screenPos.x >= 0 && screenPos.y >= 0 && w > 0 ? float4(color, 1.0) : 0;
     renderTexture[screenPos.xy] += val;
 }
@@ -190,8 +187,8 @@ void Upsample(uint3 id: SV_DispatchThreadID)
     float2 highFactor = (id.xy & 1) / 4.0 + 0.875; // weighting for pixels to the top and right
     float2 lowFactor = 2 - highFactor; // weighting for pixels to the bottom and left
 
-    highFactor = float2(1.0, 1.0);
-    lowFactor = float2(1.0, 1.0);
+    //highFactor = float2(1.0, 1.0);
+    //lowFactor = float2(1.0, 1.0);
     
     sample += srcTexture.Load(coord + int3(-1, -1, 0)) * lowFactor.x * lowFactor.x;
     sample += srcTexture.Load(coord + int3(0, -1, 0)) * 2 * lowFactor.y;
@@ -204,15 +201,48 @@ void Upsample(uint3 id: SV_DispatchThreadID)
     sample += srcTexture.Load(coord + int3(1, 1, 0)) * highFactor.x * highFactor.y;
 
     float4 tex = destTexture[id.xy];
-    tex += sample * 0.0625 * 1.1;    
+    tex += sample * 0.0625 * 1.2;    
     destTexture[id.xy] = tex;
 }
 
 // Fade kernel, subtracts color from all pixels
 [numthreads(32, 8, 1)]
-void ProcessTexture(uint3 id : SV_DispatchThreadID)
+void FadeTexture(uint3 id : SV_DispatchThreadID)
 {
     renderTexture[id.xy] = max(0, renderTexture[id.xy] - 0.05);
+}
+
+// SamplerState ssampler
+// {
+//     Filter = MIN_MAG_MIP_POINT;
+//     AddressU = Wrap;
+//     AddressV = Wrap;
+// };
+
+inline float luminance(float3 color) {
+    return dot(color, float3(0.299f, 0.587f, 0.114f));
+}
+
+inline float3 TumblinRushmeier(float3 col, float Lavg)
+{
+    const float Ldmax = 100;
+    float Lin = luminance(col);
+
+    //float Lavg = tex2Dlod(_LuminanceTex, float4(i.uv.x, i.uv.y, 0, 10.0f)).r;
+    float Cmax = 1;
+
+    float logLrw = log10(Lavg) + 0.84;
+    float alphaRw = 0.4 * logLrw + 2.92;
+    float betaRw = -0.4 * logLrw * logLrw - 2.584 * logLrw + 2.0208;
+    float Lwd = Ldmax / sqrt(Cmax);
+    float logLd = log10(Lwd) + 0.84;
+    float alphaD = 0.4 * logLd + 2.92;
+    float betaD = -0.4 * logLd * logLd - 2.584 * logLd + 2.0208;
+    float Lout = pow(Lin, alphaRw / alphaD) / Ldmax * pow(10.0, (betaRw - betaD) / alphaD) - (1.0 / Cmax);
+
+    float3 Cout = col / Lin * Lout;
+
+    return saturate(Cout);
 }
 
 // PostProcessTexture
@@ -220,7 +250,11 @@ void ProcessTexture(uint3 id : SV_DispatchThreadID)
 void PostProcessTexture(uint3 id : SV_DispatchThreadID)
 {
     float3 val = renderTexture.Load(id.xy);
+    //float3 Lavg = luminance(renderTexture.);
+    //val = TumblinRushmeier(val, Lavg);
     renderTexture[id.xy] = float4(pow(val, 0.7), 1);
+
+    //if (dot(val, val) > 1) renderTexture[id.xy] = float4(1, 0, 1, 1);
 }
 
 // Clear texture kernel

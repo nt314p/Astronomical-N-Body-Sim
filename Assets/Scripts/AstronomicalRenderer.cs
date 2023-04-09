@@ -14,7 +14,7 @@ public class AstronomicalRenderer
     public int Passes = 10;
 
     private readonly int numMasses;
-    private readonly int processTextureId;
+    private readonly int fadeTextureId;
     private readonly int renderMassesId;
     private readonly int clearTextureId;
     private readonly int minColorSpeedId;
@@ -29,7 +29,7 @@ public class AstronomicalRenderer
         this.computeShader = computeShader;
         this.camera = camera;
 
-        processTextureId = computeShader.FindKernel("ProcessTexture");
+        fadeTextureId = computeShader.FindKernel("FadeTexture");
         renderMassesId = computeShader.FindKernel("RenderMasses");
         clearTextureId = computeShader.FindKernel("ClearTexture");
         upsampleId = computeShader.FindKernel("Upsample");
@@ -70,17 +70,18 @@ public class AstronomicalRenderer
         if (renderTexture == null)
         {
             renderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
+            renderTexture.useMipMap = true;
             renderTexture.enableRandomWrite = true;
             renderTexture.Create();
             
             computeShader.SetTexture(clearTextureId, "renderTexture", renderTexture);
             computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
-            computeShader.SetTexture(processTextureId, "renderTexture", renderTexture);
+            computeShader.SetTexture(fadeTextureId, "renderTexture", renderTexture);
         }
 
         if (mipmaps == null)
         {
-            mipmaps = new RenderTexture[BloomMipDepth];
+            mipmaps = new RenderTexture[BloomMipDepth]; // TODO: unify creation of render texture
             var width = Screen.width;
             var height = Screen.height;
             
@@ -104,7 +105,7 @@ public class AstronomicalRenderer
 
         if (useFadeProcessing)
         {
-            computeShader.Dispatch(processTextureId, 
+            computeShader.Dispatch(fadeTextureId, 
                 Mathf.CeilToInt(renderTexture.width / 32f),
                 Mathf.CeilToInt(renderTexture.height / 8f), 1);
         }
@@ -153,7 +154,7 @@ public class AstronomicalRenderer
         computeShader.Dispatch(postProcessTextureId, 
             Mathf.CeilToInt(renderTexture.width / 32f), 
             Mathf.CeilToInt(renderTexture.height / 8f), 1);
-        
+        renderTexture = mipmaps[0];
         return mipmaps[0];
     }
 

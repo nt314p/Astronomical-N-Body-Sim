@@ -99,7 +99,7 @@ public class DisplayManager : MonoBehaviour
     public void OnBodiesEndEdit()
     {
         if (!int.TryParse(bodiesInput.text, out var bodies)) return;
-        bodies = Mathf.RoundToInt((bodies / 512.0f) * 512);
+        bodies = Mathf.RoundToInt(bodies / 512.0f) * 512;
         bodies = Mathf.Max(bodies, 512);
         bodies = Mathf.Min(bodies, 65536);
         bodiesInput.text = bodies.ToString();
