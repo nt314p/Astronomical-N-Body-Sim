@@ -9,6 +9,9 @@ public class OrbitCamera : MonoBehaviour
     private float pitch = 30;
     private const float Radius = 1000f;
     private const float MaxPitchAngle = 89f;
+    private const float ScrollSensitivity = 0.3f;
+    private const float MinOrthoSize = 10;
+    private const float MaxOrthoSize = 1000;
 
     [SerializeField] private InputAction moveAction;
 
@@ -22,11 +25,11 @@ public class OrbitCamera : MonoBehaviour
 
     private void Update()
     {
-        var movement = moveAction.ReadValue<Vector2>();
-        cam.orthographicSize += Mouse.current.scroll.y.ReadValue() * 0.3f;
-        cam.orthographicSize = Mathf.Clamp(cam.orthographicSize, 10, 1000);
+        cam.orthographicSize += Mouse.current.scroll.y.ReadValue() * ScrollSensitivity;
+        cam.orthographicSize = Mathf.Clamp(cam.orthographicSize, MinOrthoSize, MaxOrthoSize);
         
         var camTransform = cam.transform;
+        var movement = moveAction.ReadValue<Vector2>();
         target += camTransform.up * movement.y + camTransform.right * movement.x;
 
        // yaw += Time.deltaTime * 5f;

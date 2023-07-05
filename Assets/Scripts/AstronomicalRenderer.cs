@@ -4,13 +4,12 @@ public class AstronomicalRenderer
 {
     private readonly Camera camera;
     private readonly ComputeShader computeShader;
-    private RenderTexture renderTexture;
+    public RenderTexture RenderTexture { get; private set; }
     private RenderTexture[] mipmaps;
 
     private readonly AstronomicalSimulator astronomicalSimulator;
 
     private const int BloomMipDepth = 10;
-
     public int Passes = 10;
 
     private readonly int numMasses;
@@ -67,16 +66,16 @@ public class AstronomicalRenderer
 
     public RenderTexture RenderMasses(Vector2Int dimensions, bool useFadeProcessing = false)
     {
-        if (renderTexture == null)
+        if (RenderTexture == null)
         {
-            renderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
-            renderTexture.useMipMap = true;
-            renderTexture.enableRandomWrite = true;
-            renderTexture.Create();
+            RenderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
+            RenderTexture.useMipMap = true;
+            RenderTexture.enableRandomWrite = true;
+            RenderTexture.Create();
             
-            computeShader.SetTexture(clearTextureId, "renderTexture", renderTexture);
-            computeShader.SetTexture(renderMassesId, "renderTexture", renderTexture);
-            computeShader.SetTexture(fadeTextureId, "renderTexture", renderTexture);
+            computeShader.SetTexture(clearTextureId, "renderTexture", RenderTexture);
+            computeShader.SetTexture(renderMassesId, "renderTexture", RenderTexture);
+            computeShader.SetTexture(fadeTextureId, "renderTexture", RenderTexture);
         }
 
         if (mipmaps == null)
@@ -96,21 +95,21 @@ public class AstronomicalRenderer
             }
         }
 
-        if (renderTexture == null || !useFadeProcessing)
+        if (RenderTexture == null || !useFadeProcessing)
         {
             computeShader.Dispatch(clearTextureId, 
-                Mathf.CeilToInt(renderTexture.width / 32f), 
-                Mathf.CeilToInt(renderTexture.height / 8f), 1);
+                Mathf.CeilToInt(RenderTexture.width / 32f), 
+                Mathf.CeilToInt(RenderTexture.height / 8f), 1);
         }
 
         if (useFadeProcessing)
         {
             computeShader.Dispatch(fadeTextureId, 
-                Mathf.CeilToInt(renderTexture.width / 32f),
-                Mathf.CeilToInt(renderTexture.height / 8f), 1);
+                Mathf.CeilToInt(RenderTexture.width / 32f),
+                Mathf.CeilToInt(RenderTexture.height / 8f), 1);
         }
 
-        var viewToScreen = Matrix4x4.Scale(new Vector3(renderTexture.width, renderTexture.height, 1));
+        var viewToScreen = Matrix4x4.Scale(new Vector3(RenderTexture.width, RenderTexture.height, 1));
         var clipToViewportMatrix = Matrix4x4.Translate(Vector3.one * 0.5f) * Matrix4x4.Scale(Vector3.one * 0.5f);
         var worldToScreenMatrix =
             viewToScreen * clipToViewportMatrix * camera.projectionMatrix * camera.worldToCameraMatrix;
@@ -119,7 +118,7 @@ public class AstronomicalRenderer
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix);
         computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
 
-        mipmaps[0] = renderTexture;
+        mipmaps[0] = RenderTexture;
         for (var i = 1; i < Passes; i++) // Downsample
         {
             var srcTexture = mipmaps[i - 1];
@@ -149,12 +148,12 @@ public class AstronomicalRenderer
                 Mathf.CeilToInt(destTexture.height / 8f), 1);
         }
 
-        renderTexture = mipmaps[0];
-        computeShader.SetTexture(postProcessTextureId, "renderTexture", renderTexture);
+        RenderTexture = mipmaps[0];
+        computeShader.SetTexture(postProcessTextureId, "renderTexture", RenderTexture);
         computeShader.Dispatch(postProcessTextureId, 
-            Mathf.CeilToInt(renderTexture.width / 32f), 
-            Mathf.CeilToInt(renderTexture.height / 8f), 1);
-        renderTexture = mipmaps[0];
+            Mathf.CeilToInt(RenderTexture.width / 32f), 
+            Mathf.CeilToInt(RenderTexture.height / 8f), 1);
+        RenderTexture = mipmaps[0];
         return mipmaps[0];
     }
 
@@ -162,10 +161,5 @@ public class AstronomicalRenderer
     {
         return new Vector4(1.0f / (rtA.width - 1), 1.0f / (rtA.height - 1), 1.0f / (rtB.width - 1),
             1.0f / (rtB.height - 1));
-    }
-
-    public RenderTexture GetRenderTexture()
-    {
-        return renderTexture;
     }
 }

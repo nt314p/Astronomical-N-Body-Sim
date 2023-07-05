@@ -16,6 +16,8 @@ public static class FileHelper
     private static int replayingNumMasses;
     public static int ReplayStep;
     private static AstronomicalSimulator currentAstronomicalSimulator;
+    
+    // TODO: look into custom error system (enum) instead of throwing exceptions
 
     public static void InitializeDirectories()
     {

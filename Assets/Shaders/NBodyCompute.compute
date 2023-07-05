@@ -13,11 +13,13 @@
 #define renderThreads renderThreadLength * renderThreadLength
 #define G_u 0.000667408 // universal gravitational constant (not accurate)
 
+
 struct PointMass
 {
     float mass;
     float3 position;
 };
+
 
 struct Motion
 {
@@ -32,10 +34,8 @@ RWTexture2D<float4> renderTexture; // :register(u3);
 
 Texture2D srcTexture;
 RWTexture2D<float4> destTexture;
-float4 textureDimensions;
 
 groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared memory buffer
-groupshared float2 threadGroupScreenPositions[renderThreads];
 
 uint numMasses;
 float deltaTime;
@@ -60,7 +60,8 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
 
     for (uint i = 0; i < numMasses; i += threadsX)
     {
-        const uint globalIndex = groupIndex + i;
+        uint globalIndex = groupIndex + i;
+        globalIndex -= globalIndex >= threadsX ? threadsX : 0; // wrap if out of bounds
         threadGroupPointMasses[groupIndex] = masses[globalIndex]; // each thread copies global data into thread memory
 
         GroupMemoryBarrierWithGroupSync(); // ensure that all of thread memory is populated before manipulating
@@ -80,17 +81,12 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
     accel *= G_u;
     pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime;
     vel += (m.acceleration + accel) * halfDeltaTime;
-
-    GroupMemoryBarrierWithGroupSync();
-
-    masses[id.x].position = pos;
+    
     m.velocity = vel;
     m.acceleration = accel;
     motions[id.x] = m;
+    masses[id.x].position = pos;
 }
-
-float minColorSpeed;
-float maxColorSpeed;
 
 [numthreads(256, 1, 1)]
 void RenderMasses(uint3 id : SV_DispatchThreadID)

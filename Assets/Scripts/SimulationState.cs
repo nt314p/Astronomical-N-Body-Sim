@@ -11,25 +11,21 @@ public struct PointMassState
 
 public enum RadiusRelation
 {
-    RadiusSquareRoot=0, 
-    Radius=1,
-    RadiusSquared=2,
-    Constant=3
+    RadiusSquareRoot, 
+    Radius,
+    RadiusSquared,
+    Constant
 }
 
-public class SimulationState
+public class SimulationState // TODO: rework this class, only used for initializing the sim
 {
-    private readonly PointMassState[] masses;
-    public int NumMasses => masses.Length;
+    public PointMassState[] StateMasses { get; }
+    public int NumMasses => StateMasses.Length;
 
-    public SimulationState(PointMassState[] masses)
+    // TODO: allow for more galaxy customizations
+    public SimulationState(int numMasses) 
     {
-        this.masses = masses;
-    }
-
-    public SimulationState(int numMasses)
-    {
-        masses = new PointMassState[numMasses];
+        StateMasses = new PointMassState[numMasses];
 
         for (var index = 0; index < numMasses; index++) // create a little galaxy
         {
@@ -41,7 +37,7 @@ public class SimulationState
                       20.15500f; // circular motion
             //pos.x += 1000;
 
-            masses[index] = new PointMassState
+            StateMasses[index] = new PointMassState
             {
                 Mass = 1000,
                 Position = pos,
@@ -53,7 +49,7 @@ public class SimulationState
 
     public SimulationState(int numMasses, float mass, float initialVelocity, float galaxyRadius, RadiusRelation massDistribution, RadiusRelation velocityRelation)
     {
-        masses = new PointMassState[numMasses];
+        StateMasses = new PointMassState[numMasses];
 
         for (var index = 0; index < numMasses; index++)
         {
@@ -63,7 +59,7 @@ public class SimulationState
                 case RadiusRelation.RadiusSquareRoot: // *?
                     radius = Mathf.Sqrt(radius);
                     break;
-                case RadiusRelation.Radius: // * not mathematically correct, but an okay approximation
+                case RadiusRelation.Radius: // TODO: * not mathematically correct, but an okay approximation
                     radius = Mathf.Pow(radius, 0.3333f);
                     break;
             }
@@ -97,7 +93,7 @@ public class SimulationState
 
             var vel = Vector3.Cross(pos, Vector3.up).normalized * speed;
 
-            masses[index] = new PointMassState
+            StateMasses[index] = new PointMassState
             {
                 Mass = mass,
                 Position = pos,
@@ -106,6 +102,4 @@ public class SimulationState
             };
         }
     }
-    
-    public PointMassState[] StateMasses => masses;
 }

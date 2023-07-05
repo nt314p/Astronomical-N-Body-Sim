@@ -1,39 +1,40 @@
 using System;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Serialization;
+using Cursor = UnityEngine.Cursor;
 
 public class Simulation : MonoBehaviour
 {
     [SerializeField] private DisplayManager displayManager;
-    [SerializeField] private PromptManager promptManager;
+    [FormerlySerializedAs("promptManager")] [SerializeField] private Prompt prompt;
     [SerializeField] private ComputeShader computeShader;
     [SerializeField] private Camera cam;
     public int Passes = 10;
     [SerializeField] private bool useScreenDimensions;
     [SerializeField] private Vector2Int textureDimensions = Vector2Int.zero;
-    [SerializeField] private bool freezeSimulation;
+    [FormerlySerializedAs("freezeSimulation")] [SerializeField] private bool simulationPaused;
     [SerializeField] private bool useFadeProcessing;
-    [SerializeField] private bool renderMasses = true;
     [SerializeField] private bool lockCamera;
     
-    private bool FreezeSimulation
+    private bool SimulationPaused
     {
-        get => freezeSimulation;
+        get => simulationPaused;
         set
         {
-            freezeSimulation = value;
+            simulationPaused = value;
             if (FileHelper.IsReplaying)
             {
                 var direction = FileHelper.ReplayStep >= 0 ? "forward" : "reverse";
-                displayManager.SetMessage(freezeSimulation ? "Replay paused" : $"Replay replaying ({direction})");
+                displayManager.SetMessage(simulationPaused ? "Replay paused" : $"Replay replaying ({direction})");
             }
             else if (FileHelper.IsRecording)
             {
-                displayManager.SetMessage(freezeSimulation ? "Recording of simulation paused" : "Recording simulation");
+                displayManager.SetMessage(simulationPaused ? "Recording of simulation paused" : "Recording simulation");
             }
             else
             {
-                displayManager.SetMessage(freezeSimulation ? "Simulation paused" : "Simulation simulating");
+                displayManager.SetMessage(simulationPaused ? "Simulation paused" : "Simulation simulating");
             }
         }
     }
@@ -68,32 +69,24 @@ public class Simulation : MonoBehaviour
         
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            promptManager.ShowPrompt("Really quit?", "No", "Yes", QuitPromptCallback, false);
+            prompt.ShowPrompt("Really quit?", "Yes", "No", QuitPromptCallback);
         }
         
-        if (FileHelper.IsRecording && !FreezeSimulation)
+        if (FileHelper.IsRecording && !SimulationPaused)
         {
             FileHelper.UpdateStateRecording();
         }
-        
-        if (promptManager.IsPrompting || displayManager.IsEditingAny)
-        {
-            return;
-        }
-        
-        // if (!lockCamera)
-        // {
-        //     firstPersonCamera.ProcessCamera();
-        // }
-        
+
+        if (prompt.IsPrompting || displayManager.IsEditingAny) return;
+
         if (Input.GetKeyDown(KeyCode.F))
         {
-            if (FileHelper.IsReplaying && FreezeSimulation && FileHelper.ReplayStep == 0)
+            if (FileHelper.IsReplaying && SimulationPaused && FileHelper.ReplayStep == 0)
             {
                 FileHelper.ReplayStep = 1;
                 displayManager.UpdateTimeStepTextMultiplier(FileHelper.ReplayStep);
             }
-            FreezeSimulation = !FreezeSimulation;
+            SimulationPaused = !SimulationPaused;
         }
 
         if (Input.GetKeyDown(KeyCode.L))
@@ -104,126 +97,116 @@ public class Simulation : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.F7)) // Save simulation state
         {
-            promptManager.ShowPrompt("Enter state file name to save:", "Cancel", "Save", SaveSimulationStateCallback);
+            prompt.ShowPromptWithInput("Enter state file name to save:", "Save", "Cancel", SaveSimulationStateCallback);
         }
 
         if (Input.GetKeyDown(KeyCode.F8)) // Load simulation state
         {
-            promptManager.ShowPrompt("Enter state file name to load:", "Cancel", "Load", LoadSimulationStateCallback);
+            prompt.ShowPromptWithInput("Enter state file name to load:", "Load", "Cancel", LoadSimulationStateCallback);
         }
 
-        if (Input.GetKeyDown(KeyCode.H))
-        {
-            displayManager.ToggleHelp();
-        }
+        if (Input.GetKeyDown(KeyCode.H)) displayManager.ToggleHelp();
+        if (Input.GetKeyDown(KeyCode.K)) displayManager.ToggleSettingsMenu();
+        if (Input.GetKeyDown(KeyCode.F2)) displayManager.ToggleUI();
 
-        if (Input.GetKeyDown(KeyCode.K))
-        {
-            displayManager.ToggleSettingsMenu();
-        }
-        
         if (Input.GetKeyDown(KeyCode.F1))
         {
             SaveScreenshot();
             displayManager.SetMessage("Took screenshot");
         }
 
-        if (Input.GetKeyDown(KeyCode.F2))
-        {
-            displayManager.ToggleUI();
-        }
-
         if (Input.GetKeyDown(KeyCode.Period))
         {
             if (FileHelper.IsReplaying)
             {
-                if (!FreezeSimulation || FileHelper.ReplayStep == 0) FileHelper.ReplayStep += 1;
-                FreezeSimulation = FileHelper.ReplayStep == 0;
+                if (!SimulationPaused || FileHelper.ReplayStep == 0) FileHelper.ReplayStep += 1;
+                SimulationPaused = FileHelper.ReplayStep == 0;
                 displayManager.UpdateTimeStepTextMultiplier(FileHelper.ReplayStep);
             }
             else
             {
                 astronomicalSimulator.TimeStep *= 2;
                 displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
-                FreezeSimulation = false;
+                SimulationPaused = false;
             }
         }
 
         if (Input.GetKeyDown(KeyCode.Comma))
         {
-            FreezeSimulation = false;
+            SimulationPaused = false; // TODO: why is this only on comma but not period?
             if (FileHelper.IsReplaying)
             {
-                if (!FreezeSimulation || FileHelper.ReplayStep == 0) FileHelper.ReplayStep -= 1;
-                FreezeSimulation = FileHelper.ReplayStep == 0;
+                if (!SimulationPaused || FileHelper.ReplayStep == 0) FileHelper.ReplayStep -= 1;
+                SimulationPaused = FileHelper.ReplayStep == 0;
                 displayManager.UpdateTimeStepTextMultiplier(FileHelper.ReplayStep);
             }
             else
             {
                 astronomicalSimulator.TimeStep *= 0.5f;
                 displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
-                FreezeSimulation = false;
+                SimulationPaused = false;
             }
         }
 
-        if (Input.GetKeyDown(KeyCode.F9))
-        {
-            if (!FileHelper.IsRecording)
-            {
-                try
-                {
-                    promptManager.ShowPrompt("Enter recording file name:", "Cancel", "Record", StartRecordingCallback);
-                }
-                catch (Exception e)
-                {
-                    displayManager.SetMessage(e.Message);
-                }
-            }
-            else
-            {
-                FileHelper.EndStateRecording();
-                displayManager.SetMessage("Ended recording");
-                displayManager.SetTimeStepReadOnly(false);
-            }
-        }
-
-        if (Input.GetKeyDown(KeyCode.F10))
-        {
-            if (!FileHelper.IsReplaying && !FileHelper.IsRecording)
-            {
-                try
-                {
-                    promptManager.ShowPrompt("Enter stream file name to replay:", "Cancel", "Replay", StartReplayCallback);
-                }
-                catch (Exception e)
-                {
-                    displayManager.SetMessage(e.Message);
-                }
-            }
-            else
-            {
-                FileHelper.EndStateReplay();
-                displayManager.SetMessage("Ended replay");
-                displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
-                freezeSimulation = true;
-                displayManager.SetTimeStepReadOnly(false);
-            }
-        }
+        if (Input.GetKeyDown(KeyCode.F9)) ToggleRecording();
+        if (Input.GetKeyDown(KeyCode.F10)) ToggleReplay();
 
         //astronomicalSimulator.GetTotalEnergy();
         //LogEnergies();
     }
 
-    private void QuitPromptCallback(bool rightButtonClicked, string inputResult)
+    private void ToggleRecording()
     {
-        if (!rightButtonClicked) return;
+        if (!FileHelper.IsRecording)
+        {
+            try
+            {
+                prompt.ShowPromptWithInput("Enter recording file name:", "Record", "Cancel", StartRecordingCallback);
+            }
+            catch (Exception e)
+            {
+                displayManager.SetMessage(e.Message);
+            }
+        }
+        else
+        {
+            FileHelper.EndStateRecording();
+            displayManager.SetMessage("Ended recording");
+            displayManager.SetTimeStepReadOnly(false);
+        }
+    }
+
+    private void ToggleReplay()
+    {
+        if (!FileHelper.IsReplaying && !FileHelper.IsRecording)
+        {
+            try
+            {
+                prompt.ShowPromptWithInput("Enter stream file name to replay:", "Replay", "Cancel", StartReplayCallback);
+            }
+            catch (Exception e)
+            {
+                displayManager.SetMessage(e.Message);
+            }
+        }
+        else
+        {
+            FileHelper.EndStateReplay();
+            displayManager.SetMessage("Ended replay");
+            displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
+            simulationPaused = true;
+            displayManager.SetTimeStepReadOnly(false);
+        }
+    }
+
+    private static void QuitPromptCallback()
+    {
         FileHelper.CloseFiles();
         Application.Quit();
     }
     
-    private void SaveSimulationStateCallback(bool right, string fileName)
+    private void SaveSimulationStateCallback(string fileName)
     {
-        if (!right) return;
         try
         {
             FileHelper.SaveSimulationState(fileName, astronomicalSimulator);
@@ -235,9 +218,8 @@ public class Simulation : MonoBehaviour
         }
     }
 
-    private void LoadSimulationStateCallback(bool right, string fileName)
+    private void LoadSimulationStateCallback(string fileName)
     {
-        if (!right) return;
         try
         {
             FileHelper.LoadSimulationState(fileName, astronomicalSimulator);
@@ -254,24 +236,22 @@ public class Simulation : MonoBehaviour
         }
     }
 
-    private void StartRecordingCallback(bool right, string fileName)
+    private void StartRecordingCallback(string fileName)
     {
-        if (!right) return;
         FileHelper.StartStateRecording(fileName, astronomicalSimulator);
         displayManager.SetMessage("Started recording");
         displayManager.SetTimeStepReadOnly(true);
     }
 
-    private void StartReplayCallback(bool right, string fileName)
+    private void StartReplayCallback(string fileName)
     {
-        if (!right) return;
         try
         {
             FileHelper.StartStateReplay(fileName, astronomicalSimulator);
             astronomicalRenderer.SetBuffers();
             FileHelper.ReplayStep = 0;
             displayManager.UpdateTimeStepTextMultiplier(FileHelper.ReplayStep);
-            freezeSimulation = true;
+            simulationPaused = true;
             displayManager.SetMessage("Started replay");
             displayManager.SetTimeStepReadOnly(true);
         }
@@ -345,12 +325,12 @@ public class Simulation : MonoBehaviour
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        if (!FreezeSimulation && !FileHelper.IsReplaying)
+        if (!SimulationPaused && !FileHelper.IsReplaying)
         {
             astronomicalSimulator.UpdateMasses();
         }
         
-        if (FileHelper.IsReplaying && !FreezeSimulation)
+        if (FileHelper.IsReplaying && !SimulationPaused)
         {
             try
             {
@@ -364,33 +344,24 @@ public class Simulation : MonoBehaviour
             catch (InvalidOperationException)
             {
                 displayManager.SetMessage("Reached end of replay file");
-                Debug.Log("ended");
             }
-        } 
-
-        if (renderMasses)
-        {
-            var rt = astronomicalRenderer.RenderMasses(useScreenDimensions
-                ? new Vector2Int(Screen.width, Screen.height)
-                : textureDimensions, useFadeProcessing);
-
-            Graphics.Blit(rt, destination);
         }
-        else
-        {
-            Graphics.Blit(source, destination);
-        }
+
+        var rt = astronomicalRenderer.RenderMasses(useScreenDimensions
+            ? new Vector2Int(Screen.width, Screen.height)
+            : textureDimensions, useFadeProcessing);
+
+        Graphics.Blit(rt, destination);
     }
 
     private void SaveScreenshot()
     {
-        var rt = astronomicalRenderer.GetRenderTexture();
+        var rt = astronomicalRenderer.RenderTexture;
         var texture = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
         RenderTexture.active = rt;
         texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
         RenderTexture.active = null;
 
         FileHelper.SaveScreenshot(texture);
-        displayManager.SetMessage("Took screenshot");
     }
 }

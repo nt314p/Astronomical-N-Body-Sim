@@ -18,14 +18,15 @@ public class AstronomicalSimulator
     private const int SizeOfPointMass = 16;
     private const int SizeOfMotion = 24;
     private const int ComputeThreads = 512;
+    private const int MaxBodies = 65536;
     private readonly ComputeShader computeShader;
 
     public int NumMasses { get; private set; }
     public ComputeBuffer MassesBuffer { get; private set; }
     public ComputeBuffer MotionsBuffer { get; private set; }
 
-    private readonly byte[] massesByteBuffer = new byte[65536 * SizeOfPointMass];
-    private readonly byte[] motionsByteBuffer = new byte[65536 * SizeOfMotion];
+    private readonly byte[] massesByteBuffer = new byte[MaxBodies * SizeOfPointMass];
+    private readonly byte[] motionsByteBuffer = new byte[MaxBodies * SizeOfMotion];
 
     private ComputeBuffer readoutBuffer;
 
@@ -36,7 +37,7 @@ public class AstronomicalSimulator
     public AstronomicalSimulator(ComputeShader computeShader, SimulationState simulationState)
     {
         this.computeShader = computeShader;
-        
+
         stepSimId = computeShader.FindKernel("StepSimulation");
         compEnergyId = computeShader.FindKernel("ComputeTotalEnergy");
 
@@ -54,50 +55,17 @@ public class AstronomicalSimulator
         MotionsBuffer?.Release();
         MassesBuffer = null;
         MotionsBuffer = null;
-        
-        if (releaseReadout)
-        {
-            readoutBuffer?.Release();
-            readoutBuffer = null;
-        }
+
+        if (!releaseReadout) return;
+        readoutBuffer?.Release();
+        readoutBuffer = null;
     }
 
     public void UpdateMasses() // compute a single step from the simulation
     {
         computeShader.SetFloat("deltaTime", TimeStep);
         computeShader.SetFloat("halfDeltaTime", TimeStep * 0.5f);
-        computeShader.Dispatch(stepSimId, NumMasses / ComputeThreads, 1, 1); 
-    }
-
-    public SimulationState GetSimulationState()
-    {
-        var pointMasses = new PointMassState[NumMasses];
-        GetSimulationStateNonAlloc(pointMasses);
-        return new SimulationState(pointMasses);
-    }
-
-    private void GetSimulationStateNonAlloc(PointMassState[] pointMasses)
-    {
-        if (pointMasses.Length < NumMasses)
-        {
-            throw new InvalidOperationException("Buffer length too small");
-        }
-        
-        var massesArr = new PointMass[NumMasses];
-        var motionsArr = new Motion[NumMasses];
-        MassesBuffer.GetData(massesArr);
-        MotionsBuffer.GetData(motionsArr);
-
-        for (var index = 0; index < NumMasses; index++)
-        {
-            pointMasses[index] = new PointMassState
-            {
-                Mass = massesArr[index].Mass,
-                Position = massesArr[index].Position,
-                Velocity = motionsArr[index].Velocity,
-                Acceleration = motionsArr[index].Acceleration
-            };
-        }
+        computeShader.Dispatch(stepSimId, NumMasses / ComputeThreads, 1, 1);
     }
 
     public void GetSimulationStateNonAllocBytes(byte[] pointMassesBuffer)
@@ -106,10 +74,10 @@ public class AstronomicalSimulator
         {
             throw new InvalidOperationException("Buffer length too small");
         }
-        
+
         MassesBuffer.GetData(massesByteBuffer, 0, 0, NumMasses * SizeOfPointMass);
         MotionsBuffer.GetData(motionsByteBuffer, 0, 0, NumMasses * SizeOfMotion);
-        
+
         for (var index = 0; index < NumMasses; index++)
         {
             var offset = index * (SizeOfPointMass + SizeOfMotion);
@@ -121,7 +89,7 @@ public class AstronomicalSimulator
             }
 
             offset += SizeOfPointMass;
-            
+
             for (var motionIndex = 0; motionIndex < SizeOfMotion; motionIndex++)
             {
                 pointMassesBuffer[offset + motionIndex] = motionsByteBuffer[motionOffset + motionIndex];
@@ -129,7 +97,7 @@ public class AstronomicalSimulator
         }
     }
 
-    public void SetSimulationState(SimulationState simulationState)
+    private void SetSimulationState(SimulationState simulationState)
     {
         ReleaseBuffers();
         NumMasses = simulationState.NumMasses;
@@ -141,8 +109,8 @@ public class AstronomicalSimulator
         for (var i = 0; i < NumMasses; i++) // Change point mass creation here
         {
             var stateMass = stateMasses[i];
-            masses[i] = new PointMass{Mass= stateMass.Mass, Position = stateMass.Position};
-            motions[i] = new Motion {Velocity = stateMass.Velocity, Acceleration = stateMass.Acceleration};
+            masses[i] = new PointMass { Mass = stateMass.Mass, Position = stateMass.Position };
+            motions[i] = new Motion { Velocity = stateMass.Velocity, Acceleration = stateMass.Acceleration };
         }
 
         MassesBuffer = new ComputeBuffer(NumMasses, SizeOfPointMass);
@@ -163,7 +131,7 @@ public class AstronomicalSimulator
     {
         ReleaseBuffers();
         NumMasses = newNumMasses;
-        
+
         for (var index = 0; index < NumMasses; index++)
         {
             var offset = index * (SizeOfPointMass + SizeOfMotion);
@@ -175,13 +143,13 @@ public class AstronomicalSimulator
             }
 
             offset += SizeOfPointMass;
-            
+
             for (var motionIndex = 0; motionIndex < SizeOfMotion; motionIndex++)
             {
                 motionsByteBuffer[motionOffset + motionIndex] = pointMassesBuffer[offset + motionIndex];
             }
         }
-        
+
         MassesBuffer = new ComputeBuffer(NumMasses, SizeOfPointMass);
         MassesBuffer.SetData(massesByteBuffer, 0, 0, NumMasses * SizeOfPointMass);
 
@@ -202,6 +170,7 @@ public class AstronomicalSimulator
         {
             throw new NullReferenceException("Readout buffer is null");
         }
+
         computeShader.Dispatch(compEnergyId, NumMasses / 256, 1, 1);
         var readoutArr = new float[NumMasses * 2];
         readoutBuffer.GetData(readoutArr);
@@ -216,6 +185,7 @@ public class AstronomicalSimulator
             potentialEnergy += readoutArr[offset + 1];
         }
 
-        return new Vector3(kineticEnergy, potentialEnergy, kineticEnergy + potentialEnergy); // Kinetic, Potential, Total
+        return new Vector3(kineticEnergy, potentialEnergy,
+            kineticEnergy + potentialEnergy); // Kinetic, Potential, Total
     }
 }

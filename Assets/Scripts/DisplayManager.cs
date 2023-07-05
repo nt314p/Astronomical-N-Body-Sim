@@ -21,7 +21,10 @@ public class DisplayManager : MonoBehaviour
     [SerializeField] private TMP_InputField minColorSpeedInput;
     [SerializeField] private TMP_InputField maxColorSpeedInput;
     [SerializeField] private TextMeshProUGUI statusText;
-    public bool IsEditingAny { get; set; }
+    private const int BodyInterval = 512; // TODO: synchronize these values
+    private const int MaxBodies = 65536;
+    
+    public bool IsEditingAny { get; private set; }
 
     private void Start()
     {
@@ -99,9 +102,9 @@ public class DisplayManager : MonoBehaviour
     public void OnBodiesEndEdit()
     {
         if (!int.TryParse(bodiesInput.text, out var bodies)) return;
-        bodies = Mathf.RoundToInt(bodies / 512.0f) * 512;
-        bodies = Mathf.Max(bodies, 512);
-        bodies = Mathf.Min(bodies, 65536);
+        bodies = Mathf.RoundToInt(bodies / ((float)BodyInterval)) * BodyInterval;
+        bodies = Mathf.Max(bodies, BodyInterval);
+        bodies = Mathf.Min(bodies, MaxBodies);
         bodiesInput.text = bodies.ToString();
     }
 
