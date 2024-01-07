@@ -13,101 +13,51 @@ public class AstronomicalRenderer
     public int Passes = 10;
 
     private readonly int numMasses;
-    private readonly int fadeTextureId;
-    private readonly int renderMassesId;
-    private readonly int clearTextureId;
-    private readonly int minColorSpeedId;
-    private readonly int maxColorSpeedId;
-    private readonly int upsampleId;
-    private readonly int downsampleId;
-    private readonly int postProcessTextureId;
+    private readonly int fadeTextureIndex;
+    private readonly int renderMassesIndex;
+    private readonly int clearTextureIndex;
+    private readonly int upsampleIndex;
+    private readonly int downsampleIndex;
+    private readonly int postProcessTextureIndex;
+    private readonly int renderTextureId;
 
-    public AstronomicalRenderer(AstronomicalSimulator astronomicalSimulator, ComputeShader computeShader, Camera camera)
+    public AstronomicalRenderer(int numMasses, ComputeShader computeShader, Camera camera, Vector2Int textureDimensions, ComputeBuffer massesBuffer, ComputeBuffer motionsBuffer)
     {
-        this.astronomicalSimulator = astronomicalSimulator;
         this.computeShader = computeShader;
         this.camera = camera;
 
-        fadeTextureId = computeShader.FindKernel("FadeTexture");
-        renderMassesId = computeShader.FindKernel("RenderMasses");
-        clearTextureId = computeShader.FindKernel("ClearTexture");
-        upsampleId = computeShader.FindKernel("Upsample");
-        downsampleId = computeShader.FindKernel("Downsample");
-        minColorSpeedId = Shader.PropertyToID("minColorSpeed");
-        maxColorSpeedId = Shader.PropertyToID("maxColorSpeed");
-        postProcessTextureId = computeShader.FindKernel("PostProcessTexture");
+        fadeTextureIndex = computeShader.FindKernel("FadeTexture");
+        renderMassesIndex = computeShader.FindKernel("RenderMasses");
+        clearTextureIndex = computeShader.FindKernel("ClearTexture");
+        upsampleIndex = computeShader.FindKernel("Upsample");
+        downsampleIndex = computeShader.FindKernel("Downsample");
+        postProcessTextureIndex = computeShader.FindKernel("PostProcessTexture");
+        
+        renderTextureId = Shader.PropertyToID("renderTexture");
 
-        numMasses = astronomicalSimulator.NumMasses;
+        this.numMasses = numMasses;
+        
+        SetBuffers(massesBuffer, motionsBuffer);
+        
+        GenerateMipMaps(textureDimensions);
 
-        computeShader.SetBuffer(renderMassesId, "masses", astronomicalSimulator.MassesBuffer);
-        computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
-    }
-
-    public void SetBuffers()
-    {
-        computeShader.SetBuffer(renderMassesId, "masses", astronomicalSimulator.MassesBuffer);
-        computeShader.SetBuffer(renderMassesId, "motions", astronomicalSimulator.MotionsBuffer);
-    }
-
-    public void ReleaseBuffers()
-    {
-
-    }
-
-    public void SetMinColorSpeed(float minSpeed)
-    {
-        computeShader.SetFloat(minColorSpeedId, minSpeed);
-    }
-
-    public void SetMaxColorSpeed(float maxSpeed)
-    {
-        computeShader.SetFloat(maxColorSpeedId, maxSpeed);
-    }
-
-    public RenderTexture RenderMasses(Vector2Int dimensions, bool useFadeProcessing = false)
-    {
-        if (RenderTexture == null)
-        {
-            RenderTexture = new RenderTexture(dimensions.x, dimensions.y, 16);
-            RenderTexture.useMipMap = true;
-            RenderTexture.enableRandomWrite = true;
-            RenderTexture.Create();
+        RenderTexture = mipmaps[0];
             
-            computeShader.SetTexture(clearTextureId, "renderTexture", RenderTexture);
-            computeShader.SetTexture(renderMassesId, "renderTexture", RenderTexture);
-            computeShader.SetTexture(fadeTextureId, "renderTexture", RenderTexture);
-        }
+        computeShader.SetTexture(clearTextureIndex, renderTextureId, RenderTexture);
+        computeShader.SetTexture(renderMassesIndex, renderTextureId, RenderTexture);
+        computeShader.SetTexture(fadeTextureIndex, renderTextureId, RenderTexture);
+    }
 
-        if (mipmaps == null)
-        {
-            mipmaps = new RenderTexture[BloomMipDepth]; // TODO: unify creation of render texture
-            var width = Screen.width;
-            var height = Screen.height;
-            
-            for (var i = 0; i < BloomMipDepth; i++)
-            {
-                var rt = new RenderTexture(width, height, 16);
-                rt.enableRandomWrite = true;
-                rt.Create();
-                mipmaps[i] = rt;
-                width /= 2;
-                height /= 2;
-            }
-        }
+    // TODO: can we reduce calling this? perhaps give FileHelper the astroRenderer as well as the astroSim?
+    public void SetBuffers(ComputeBuffer massesBuffer, ComputeBuffer motionsBuffer)
+    {
+        computeShader.SetBuffer(renderMassesIndex, "masses", massesBuffer);
+        computeShader.SetBuffer(renderMassesIndex, "motions", motionsBuffer);
+    }
 
-        if (RenderTexture == null || !useFadeProcessing)
-        {
-            computeShader.Dispatch(clearTextureId, 
-                Mathf.CeilToInt(RenderTexture.width / 32f), 
-                Mathf.CeilToInt(RenderTexture.height / 8f), 1);
-        }
-
-        if (useFadeProcessing)
-        {
-            computeShader.Dispatch(fadeTextureId, 
-                Mathf.CeilToInt(RenderTexture.width / 32f),
-                Mathf.CeilToInt(RenderTexture.height / 8f), 1);
-        }
+    public RenderTexture RenderMasses(bool useFadeProcessing = false)
+    {
+        DispatchKernelOnRenderTexture(useFadeProcessing ? fadeTextureIndex : clearTextureIndex);
 
         var viewToScreen = Matrix4x4.Scale(new Vector3(RenderTexture.width, RenderTexture.height, 1));
         var clipToViewportMatrix = Matrix4x4.Translate(Vector3.one * 0.5f) * Matrix4x4.Scale(Vector3.one * 0.5f);
@@ -116,7 +66,7 @@ public class AstronomicalRenderer
         // World to screen matrix derived by Wokarol
 
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix);
-        computeShader.Dispatch(renderMassesId, numMasses / 256, 1, 1);
+        computeShader.Dispatch(renderMassesIndex, numMasses / 256, 1, 1);
 
         mipmaps[0] = RenderTexture;
         for (var i = 1; i < Passes; i++) // Downsample
@@ -124,11 +74,12 @@ public class AstronomicalRenderer
             var srcTexture = mipmaps[i - 1];
             var destTexture = mipmaps[i];
 
-            computeShader.SetTexture(downsampleId, "srcTexture", srcTexture);
-            computeShader.SetTexture(downsampleId, "destTexture", destTexture);
-            computeShader.SetVector("textureDimensions", GetInverseTextureDimensions(srcTexture, destTexture));
+            computeShader.SetTexture(downsampleIndex, "srcTexture", srcTexture);
+            computeShader.SetTexture(downsampleIndex, "destTexture", destTexture);
+            computeShader.SetVector("textureDimensions", 
+                GetInverseTextureDimensions(srcTexture, destTexture));
 
-            computeShader.Dispatch(downsampleId, 
+            computeShader.Dispatch(downsampleIndex, 
                 Mathf.CeilToInt(destTexture.width / 32f),
                 Mathf.CeilToInt(destTexture.height / 8f), 1);
         }
@@ -138,23 +89,48 @@ public class AstronomicalRenderer
             var srcTexture = mipmaps[i];
             var destTexture = mipmaps[i - 1];
             
-            computeShader.SetTexture(upsampleId, "srcTexture", srcTexture);
-            computeShader.SetTexture(upsampleId, "destTexture", destTexture);
+            computeShader.SetTexture(upsampleIndex, "srcTexture", srcTexture);
+            computeShader.SetTexture(upsampleIndex, "destTexture", destTexture);
             computeShader.SetVector("textureDimensions",
                 GetInverseTextureDimensions(srcTexture, destTexture));
         
-            computeShader.Dispatch(upsampleId, 
+            computeShader.Dispatch(upsampleIndex, 
                 Mathf.CeilToInt(destTexture.width / 32f),
                 Mathf.CeilToInt(destTexture.height / 8f), 1);
         }
 
         RenderTexture = mipmaps[0];
-        computeShader.SetTexture(postProcessTextureId, "renderTexture", RenderTexture);
-        computeShader.Dispatch(postProcessTextureId, 
-            Mathf.CeilToInt(RenderTexture.width / 32f), 
-            Mathf.CeilToInt(RenderTexture.height / 8f), 1);
+        computeShader.SetTexture(postProcessTextureIndex, renderTextureId, RenderTexture);
+        DispatchKernelOnRenderTexture(postProcessTextureIndex);
+        
         RenderTexture = mipmaps[0];
         return mipmaps[0];
+    }
+
+    // Dispatches the kernel on the current render texture
+    // Kernel must use (32, 8, 1) numthreads
+    private void DispatchKernelOnRenderTexture(int kernelIndex)
+    {
+        computeShader.Dispatch(kernelIndex,
+            Mathf.CeilToInt(RenderTexture.width / 32f), 
+            Mathf.CeilToInt(RenderTexture.height / 8f), 1);
+    }
+
+    private void GenerateMipMaps(Vector2Int dimensions)
+    {
+        mipmaps = new RenderTexture[BloomMipDepth];
+        var width = dimensions.x;
+        var height = dimensions.y;
+        
+        for (var i = 0; i < BloomMipDepth; i++)
+        {
+            var renderTexture = new RenderTexture(width, height, 0);
+            renderTexture.enableRandomWrite = true;
+            renderTexture.Create();
+            mipmaps[i] = renderTexture;
+            width /= 2;
+            height /= 2;
+        }
     }
 
     private static Vector4 GetInverseTextureDimensions(Texture rtA, Texture rtB)

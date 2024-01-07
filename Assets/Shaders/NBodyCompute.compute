@@ -11,8 +11,6 @@
 #define threadsX 512 // threads per group
 #define renderThreadLength 32
 #define renderThreads renderThreadLength * renderThreadLength
-#define G_u 0.000667408 // universal gravitational constant (not accurate)
-
 
 struct PointMass
 {
@@ -50,6 +48,8 @@ inline float3 HueToRGB(float h)
     return saturate(float3(r, g, b));
 }
 
+// TODO: investigate if it is worth to implement optimization discussed in https://www.youtube.com/watch?v=L9N7ZbGSckk
+// Compute each pairwise interaction once only... possible memory access costs
 [numthreads(threadsX, 1, 1)]
 void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 {
@@ -70,15 +70,14 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
         {
             const PointMass p = threadGroupPointMasses[i2]; // faster read from thread memory
             const float3 deltaPos = p.position - pos;
-            float invDist = rsqrt(dot(deltaPos, deltaPos)); // 1/sqrt(mag^2) = 1/mag
-            invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
+            float invDist = rsqrt(dot(deltaPos, deltaPos) + 0.001); // 1/sqrt(mag^2) = 1/mag
+            //invDist = isfinite(invDist) ? invDist : 0; // suppress infinity -> 0
             accel += deltaPos * (p.mass * invDist * invDist * invDist);
         }
 
         GroupMemoryBarrierWithGroupSync();
     }
 
-    accel *= G_u;
     pos += vel * deltaTime + m.acceleration * halfDeltaTime * deltaTime;
     vel += (m.acceleration + accel) * halfDeltaTime;
     
@@ -96,9 +95,7 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
     float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
     float w = screenPos.w;
     screenPos /= w;
-
-    //float j = (length(vel) - minColorSpeed) / (maxColorSpeed - minColorSpeed);
-
+    
     float hue = frac((id.x * 73856093 ^ 19349663 + 83492791) / 4294967295.0);
 
     float3 color = clamp(HueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
@@ -110,7 +107,7 @@ void RenderMasses(uint3 id : SV_DispatchThreadID)
 void ComputeTotalEnergy(uint3 id : SV_DispatchThreadID)
 {
     PointMass p = masses[id.x];
-    float Gm = G_u * p.mass;
+    float Gm = p.mass;
     float vel = motions[id.x].velocity;
     float Ekinetic = 0.5f * vel * vel * p.mass;
     float Epotential = 0;
@@ -207,13 +204,6 @@ void FadeTexture(uint3 id : SV_DispatchThreadID)
 {
     renderTexture[id.xy] = max(0, renderTexture[id.xy] - 0.05);
 }
-
-// SamplerState ssampler
-// {
-//     Filter = MIN_MAG_MIP_POINT;
-//     AddressU = Wrap;
-//     AddressV = Wrap;
-// };
 
 inline float luminance(float3 color) {
     return dot(color, float3(0.299f, 0.587f, 0.114f));

@@ -29,8 +29,6 @@ public class DisplayManager : MonoBehaviour
     private void Start()
     {
         StartCoroutine(UpdateFPSText());
-        OnMinColorSpeedUpdate();
-        OnMaxColorSpeedUpdate();
     }
 
     private void Update()
@@ -108,28 +106,12 @@ public class DisplayManager : MonoBehaviour
         bodiesInput.text = bodies.ToString();
     }
 
-    public void OnMinColorSpeedUpdate()
-    {
-        if(float.TryParse(minColorSpeedInput.text, out var val))
-        {
-            simulation.SetMinColorSpeed(val);
-        }
-    }
-    
-    public void OnMaxColorSpeedUpdate()
-    {
-        if (float.TryParse(maxColorSpeedInput.text, out var val))
-        {
-            simulation.SetMaxColorSpeed(val);
-        }
-    }
-
     public void OnRegenerateGalaxy()
     {
         try
         {
             var numMasses = int.Parse(bodiesInput.text);
-            var mass = float.Parse(massInput.text) * 1000f;
+            var mass = float.Parse(massInput.text);
             var initialVelocity = float.Parse(initialVelocityInput.text);
             var galaxyRadius = float.Parse(galaxyRadiusInput.text);
             var distributionRelation = (RadiusRelation) distributionDropdown.value;
@@ -139,9 +121,10 @@ public class DisplayManager : MonoBehaviour
             simulation.SetSimulationState(simulationState, float.Parse(timeStepInput.text));
             SetMessage("Regenerated galaxy");
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             SetMessage("Invalid galaxy parameters");
+            Debug.LogError(exception.ToString());
         }
     }
 

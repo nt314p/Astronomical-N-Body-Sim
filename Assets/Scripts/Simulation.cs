@@ -1,19 +1,18 @@
 using System;
 using System.IO;
 using UnityEngine;
-using UnityEngine.Serialization;
 using Cursor = UnityEngine.Cursor;
 
 public class Simulation : MonoBehaviour
 {
     [SerializeField] private DisplayManager displayManager;
-    [FormerlySerializedAs("promptManager")] [SerializeField] private Prompt prompt;
+    [SerializeField] private Prompt prompt;
     [SerializeField] private ComputeShader computeShader;
     [SerializeField] private Camera cam;
-    public int Passes = 10;
+    [SerializeField] private int Passes = 10;
     [SerializeField] private bool useScreenDimensions;
     [SerializeField] private Vector2Int textureDimensions = Vector2Int.zero;
-    [FormerlySerializedAs("freezeSimulation")] [SerializeField] private bool simulationPaused;
+    [SerializeField] private bool simulationPaused;
     [SerializeField] private bool useFadeProcessing;
     [SerializeField] private bool lockCamera;
     
@@ -51,8 +50,7 @@ public class Simulation : MonoBehaviour
         Application.targetFrameRate = 60;
         FileHelper.InitializeDirectories();
         var simulationState = new SimulationState(10240);
-        astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
-        astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
+        SetSimulationState(simulationState, 0.01f); // TODO: match timestep
         displayManager.UpdateTimeStepText(astronomicalSimulator.TimeStep);
     }
 
@@ -60,7 +58,6 @@ public class Simulation : MonoBehaviour
     {
         Debug.Log("SimulationManager disabled, releasing buffers");
         astronomicalSimulator.ReleaseBuffers(true);
-        astronomicalRenderer.ReleaseBuffers();
     }
 
     private void Update()
@@ -223,7 +220,7 @@ public class Simulation : MonoBehaviour
         try
         {
             FileHelper.LoadSimulationState(fileName, astronomicalSimulator);
-            astronomicalRenderer.SetBuffers();
+            astronomicalRenderer.SetBuffers(astronomicalSimulator.MassesBuffer, astronomicalSimulator.MotionsBuffer);
             displayManager.SetMessage("Loaded simulation state");
         }
         catch (FileNotFoundException)
@@ -248,7 +245,7 @@ public class Simulation : MonoBehaviour
         try
         {
             FileHelper.StartStateReplay(fileName, astronomicalSimulator);
-            astronomicalRenderer.SetBuffers();
+            astronomicalRenderer.SetBuffers(astronomicalSimulator.MassesBuffer, astronomicalSimulator.MotionsBuffer);
             FileHelper.ReplayStep = 0;
             displayManager.UpdateTimeStepTextMultiplier(FileHelper.ReplayStep);
             simulationPaused = true;
@@ -276,26 +273,17 @@ public class Simulation : MonoBehaviour
         {
             FileHelper.EndStateRecording();
         }
-        astronomicalSimulator.ReleaseBuffers(true);
-        astronomicalRenderer.ReleaseBuffers();
+        astronomicalSimulator?.ReleaseBuffers(true);
         astronomicalSimulator = new AstronomicalSimulator(computeShader, simulationState);
-        astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator, computeShader, cam);
+        astronomicalRenderer = new AstronomicalRenderer(astronomicalSimulator.NumMasses, computeShader, cam,
+            useScreenDimensions ? new Vector2Int(Screen.width, Screen.height) : textureDimensions,
+            astronomicalSimulator.MassesBuffer, astronomicalSimulator.MotionsBuffer);
         astronomicalSimulator.TimeStep = timeStep;
     }
 
     public void SetTimeStep(float timeStep)
     {
         astronomicalSimulator.TimeStep = timeStep;
-    }
-
-    public void SetMinColorSpeed(float minSpeed)
-    {
-        astronomicalRenderer.SetMinColorSpeed(minSpeed);
-    }
-    
-    public void SetMaxColorSpeed(float maxSpeed)
-    {
-        astronomicalRenderer.SetMaxColorSpeed(maxSpeed);
     }
 
     private void LogEnergies()
@@ -335,7 +323,7 @@ public class Simulation : MonoBehaviour
             try
             {
                 FileHelper.UpdateStateReplay();
-                astronomicalRenderer.SetBuffers();
+                astronomicalRenderer.SetBuffers(astronomicalSimulator.MassesBuffer, astronomicalSimulator.MotionsBuffer);
             }
             catch (ArgumentOutOfRangeException)
             {
@@ -347,9 +335,7 @@ public class Simulation : MonoBehaviour
             }
         }
 
-        var rt = astronomicalRenderer.RenderMasses(useScreenDimensions
-            ? new Vector2Int(Screen.width, Screen.height)
-            : textureDimensions, useFadeProcessing);
+        var rt = astronomicalRenderer.RenderMasses(useFadeProcessing);
 
         Graphics.Blit(rt, destination);
     }
