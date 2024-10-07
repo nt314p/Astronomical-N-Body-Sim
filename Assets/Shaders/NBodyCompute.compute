@@ -37,7 +37,7 @@ groupshared PointMass threadGroupPointMasses[threadsX]; // thread group shared m
 
 uint numMasses;
 float deltaTime;
-float halfDeltaTime;
+float halfDeltaTime; // TODO: remove half delta time? possibly not memory efficient
 float4x4 worldToScreenMatrix;
 
 inline float3 HueToRGB(float h)
@@ -86,19 +86,25 @@ void StepSimulation(uint3 id : SV_DispatchThreadID, uint groupIndex : SV_GroupIn
     motions[id.x] = m;
     masses[id.x].position = pos;
 }
-
+ 
 [numthreads(256, 1, 1)]
 void RenderMasses(uint3 id : SV_DispatchThreadID)
 {
     float3 pos = masses[id.x].position;
-    float3 vel = motions[id.x].velocity;
+    // float3 vel = motions[id.x].velocity;
     float4 screenPos = mul(worldToScreenMatrix, float4(pos, 1)); // transform world space position to screen space
     float w = screenPos.w;
     screenPos /= w;
     
-    float hue = frac((id.x * 73856093 ^ 19349663 + 83492791) / 4294967295.0);
+    float x = frac((id.x * 73856093 ^ 19349663 + 83492791) / 4294967295.0); // previously hue
+    x = x * 1.6 - 0.3;
 
-    float3 color = clamp(HueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
+    // todo, prescale to 0 to 1 instead of 0 to 255
+    float r = min(218.9 * x + 167.4, 255.0) / 255.0;
+    float g = (-232.843 * x * x + 234.65 * x + 186.23) / 255.0;
+    float b = min(-325.17 * x * x + 220.14 * x + 217.74, 255.0) / 255.0;
+
+    float3 color = clamp(float3(r, g, b), 0, 1); //clamp(HueToRGB(hue) * float3(0.4, 0.3, 0.6) + float3(0.4, 0.3, 0.4), 0, 1);
     float4 val = screenPos.x >= 0 && screenPos.y >= 0 && w > 0 ? float4(color, 1.0) : 0;
     renderTexture[screenPos.xy] += val;
 }
@@ -165,7 +171,7 @@ void Downsample(uint3 id : SV_DispatchThreadID) // TODO: https://youtu.be/ml-5OG
     sample += BilinearSample(srcTexture, srcTexCoord + int3(2, -2, 0));
     sample += BilinearSample(srcTexture, srcTexCoord + int3(2, 2, 0));
 
-    destTexture[id.xy] = sample * 0.03125;
+    destTexture[id.xy] = sample * 0.03125 * 1.0;
 }
 
 
@@ -194,7 +200,7 @@ void Upsample(uint3 id: SV_DispatchThreadID)
     sample += srcTexture.Load(coord + int3(1, 1, 0)) * highFactor.x * highFactor.y;
 
     float4 tex = destTexture[id.xy];
-    tex += sample * 0.0625 * 1.2;    
+    tex += sample * 0.0625 * 1.0;
     destTexture[id.xy] = tex;
 }
 

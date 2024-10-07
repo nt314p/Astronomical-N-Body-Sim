@@ -62,7 +62,7 @@ public class Simulation : MonoBehaviour
 
     private void Update()
     {
-        astronomicalRenderer.Passes = Passes;
+        astronomicalRenderer.Passes = Mathf.Clamp(Passes, 0, 10);
         
         if (Input.GetKeyDown(KeyCode.Escape))
         {

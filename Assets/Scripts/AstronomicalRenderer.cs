@@ -10,7 +10,7 @@ public class AstronomicalRenderer
     private readonly AstronomicalSimulator astronomicalSimulator;
 
     private const int BloomMipDepth = 10;
-    public int Passes = 10;
+    public int Passes = 5;
 
     private readonly int numMasses;
     private readonly int fadeTextureIndex;
@@ -68,6 +68,8 @@ public class AstronomicalRenderer
         computeShader.SetMatrix("worldToScreenMatrix", worldToScreenMatrix);
         computeShader.Dispatch(renderMassesIndex, numMasses / 256, 1, 1);
 
+        //return RenderTexture;
+
         mipmaps[0] = RenderTexture;
         for (var i = 1; i < Passes; i++) // Downsample
         {
@@ -100,8 +102,8 @@ public class AstronomicalRenderer
         }
 
         RenderTexture = mipmaps[0];
-        computeShader.SetTexture(postProcessTextureIndex, renderTextureId, RenderTexture);
-        DispatchKernelOnRenderTexture(postProcessTextureIndex);
+        // computeShader.SetTexture(postProcessTextureIndex, renderTextureId, RenderTexture);
+        // DispatchKernelOnRenderTexture(postProcessTextureIndex);
         
         RenderTexture = mipmaps[0];
         return mipmaps[0];
