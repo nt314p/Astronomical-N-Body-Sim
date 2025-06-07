@@ -7,4 +7,4 @@ https://github.com/nt314p/Astronomical-N-Body-Sim/assets/32203145/a662dbca-1455-
 
 Simulation of 19,968 particles in realtime (60 FPS) on a GeForce GTX 1050 gpu.
 
-(Compression killed the quality of the video a bit. You can try opening the video in a new tab and playing in fullscreen for best results)
+(Compression killed the quality of the video a bit. You can try opening the video in a new tab and playing in fullscreen for best results. Try a different browser if you get a "file corrupt" error!)
